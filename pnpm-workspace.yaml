@@ -1,0 +1,6 @@
+# pnpm 11+ 的项目级配置入口：pnpm 不再读取 package.json 的 pnpm 字段。
+# engineStrict 按 engines 字段校验 Node 与 pnpm 版本；依赖的构建脚本默认被
+# 阻止，故显式放行 esbuild（其 postinstall 校验平台二进制）。
+engineStrict: true
+allowBuilds:
+    esbuild: true

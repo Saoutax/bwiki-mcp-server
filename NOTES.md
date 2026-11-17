@@ -2,7 +2,7 @@
 
 ## 新增 `list-pages` 读取工具（list=allpages）
 
-- 新增 `src/mediawiki/tools/list-pages.ts`，并登记进 `standardTools.ts`（工具数 30 → 31）。
+- 新增 `src/tools/list-pages.ts`，并登记进 `standardTools.ts`（工具数 30 → 31）。
 - 能按命名空间枚举全部页面，标题排序，返回 `title / pageId / namespace`。
 - 参数：`namespace`（数字 ID，默认 0=主命名空间）、`from`、`to`、`direction`、`filter`（all/redirects/nonredirects）、`limit`（≤500，默认 500）、`continueFrom` 翻页。
 - README 工具表、冒烟 `mustHave`、冒烟功能断言均已补上。

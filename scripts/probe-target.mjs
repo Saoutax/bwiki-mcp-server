@@ -19,33 +19,37 @@
  * that is correct to guess.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
-const FARM_ORIGIN = "https://wiki.biligame.com";
+const FARM_ORIGIN = 'https://wiki.biligame.com';
 
 const root = process.cwd();
-const configPath = process.env.CONFIG ?? join(root, "config.json");
+const configPath = process.env.CONFIG ?? join(root, 'config.json');
 
-function readConfig() {
-  let raw;
-  try {
-    raw = readFileSync(configPath, "utf8");
-  } catch {
-    throw new Error(
-      `找不到配置文件 ${configPath}。先复制 config.example.json 为 config.json 并填入站点代号。`,
-    );
-  }
-  return JSON.parse(raw);
-}
+const readConfig = () => {
+    let raw;
+    try {
+        raw = readFileSync(configPath, 'utf8');
+    } catch {
+        throw new Error(
+            `找不到配置文件 ${configPath}。先复制 config.example.json 为 config.json 并填入站点代号。`,
+        );
+    }
+    return JSON.parse(raw);
+};
 
 /** The codes a config names, accepting the one-wiki string shorthand. */
-function codesOf(config) {
-  const raw = config.wikis;
-  if (typeof raw === "string") return raw.trim() ? [raw.trim()] : [];
-  if (Array.isArray(raw)) return raw.filter((c) => typeof c === "string" && c.trim()).map((c) => c.trim());
-  return [];
-}
+const codesOf = config => {
+    const raw = config.wikis;
+    if (typeof raw === 'string') {
+        return raw.trim() ? [raw.trim()] : [];
+    }
+    if (Array.isArray(raw)) {
+        return raw.filter(c => typeof c === 'string' && c.trim()).map(c => c.trim());
+    }
+    return [];
+};
 
 /**
  * The wiki key and its derived URLs, in the form the probes need.
@@ -53,26 +57,28 @@ function codesOf(config) {
  * `server` carries the wiki code on BWiki (all wikis share one host and differ
  * by path), so the API URL sits at the wiki root.
  */
-export function probeTarget() {
-  const config = readConfig();
-  const codes = codesOf(config);
+const probeTarget = () => {
+    const config = readConfig();
+    const codes = codesOf(config);
 
-  const key = process.env.BWIKI_PROBE_WIKI?.trim() || codes[0] || "";
-  if (!key) {
-    throw new Error(
-      `配置 ${configPath} 里没有站点。设 "wikis": ["<站点代号>"] 或环境变量 BWIKI_PROBE_WIKI。`,
-    );
-  }
-  if (process.env.BWIKI_PROBE_WIKI?.trim() && !codes.includes(key)) {
-    throw new Error(`配置里没有站点 "${key}"。可选: ${codes.join(", ") || "（无）"}`);
-  }
+    const key = process.env.BWIKI_PROBE_WIKI?.trim() || codes[0] || '';
+    if (!key) {
+        throw new Error(
+            `配置 ${configPath} 里没有站点。设 "wikis": ["<站点代号>"] 或环境变量 BWIKI_PROBE_WIKI。`,
+        );
+    }
+    if (process.env.BWIKI_PROBE_WIKI?.trim() && !codes.includes(key)) {
+        throw new Error(`配置里没有站点 "${key}"。可选: ${codes.join(', ') || '（无）'}`);
+    }
 
-  const server = `${FARM_ORIGIN}/${key}`;
-  return {
-    key,
-    server,
-    apiUrl: `${server}/api.php`,
-    config,
-    configPath,
-  };
-}
+    const server = `${FARM_ORIGIN}/${key}`;
+    return {
+        key,
+        server,
+        apiUrl: `${server}/api.php`,
+        config,
+        configPath,
+    };
+};
+
+export { probeTarget };

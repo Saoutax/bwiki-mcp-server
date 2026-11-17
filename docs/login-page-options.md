@@ -17,11 +17,11 @@ bwiki-login
 
 `SESSDATA` 是 `.bilibili.com` 上的 HttpOnly cookie，只能通过 CDP 读取。
 
-| 方式 | 结果 |
-|---|---|
-| 页面 JS 读 | 只读得到 `b_nut`、`buvid3`、`buvid_fp` |
-| Node 读浏览器 cookie 库 | 浏览器运行时独占锁，读不到 |
-| CDP（puppeteer） | 正常读出，`httpOnly=true` |
+| 方式                    | 结果                                   |
+| ----------------------- | -------------------------------------- |
+| 页面 JS 读              | 只读得到 `b_nut`、`buvid3`、`buvid_fp` |
+| Node 读浏览器 cookie 库 | 浏览器运行时独占锁，读不到             |
+| CDP（puppeteer）        | 正常读出，`httpOnly=true`              |
 
 ## 浏览器依赖
 
@@ -31,11 +31,11 @@ bwiki-login
 
 `api.php` 直接接受 bilibili 的 `SESSDATA`，无需 wiki 先铸 `gamecenter_wiki__session`。去掉 `SESSDATA` 即退化为匿名（`userinfo.name` 变为出口 IP）。
 
-| 凭证 | 结果 |
-|---|---|
-| 仅 wiki session cookie | 认证通过，`canEdit=true` |
+| 凭证                        | 结果                     |
+| --------------------------- | ------------------------ |
+| 仅 wiki session cookie      | 认证通过，`canEdit=true` |
 | 仅 bilibili passport cookie | 认证通过，`canEdit=true` |
-| 去掉 SESSDATA | 匿名，`name` 为出口 IP |
+| 去掉 SESSDATA               | 匿名，`name` 为出口 IP   |
 
 验证脚本：`scripts/probe-mwn-auth.mjs`
 

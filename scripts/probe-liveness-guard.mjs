@@ -21,44 +21,46 @@
  *     unreachable says nothing about the credential.
  */
 
-import { pathToFileURL } from "node:url";
-import { join } from "node:path";
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const root = process.cwd();
 // The wiki key is only a label in this test (the bot is a fake), but it is read
 // from the config so no site name is baked into the repo.
-const { key: WIKI_KEY } = (await import("./probe-target.mjs")).probeTarget();
+const { key: WIKI_KEY } = (await import('./probe-target.mjs')).probeTarget();
 const { sessionLiveness, isBilibiliUid, SessionExpiredError } = await import(
-  pathToFileURL(join(root, "dist", "bwiki", "liveness.js")).href
+    pathToFileURL(join(root, 'dist', 'bwiki', 'liveness.js')).href
 );
 
 const results = [];
-function report(name, ok, detail) {
-  results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"}  ${name}`);
-  if (detail) console.log(`      ${String(detail).slice(0, 200)}`);
-}
+const report = (name, ok, detail) => {
+    results.push({ name, ok });
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
+    if (detail) {
+        console.log(`      ${String(detail).slice(0, 200)}`);
+    }
+};
 
 /** A bot stand-in whose userinfo reports whatever the test needs. */
-function fakeBot(userinfo) {
-  return {
+const fakeBot = userinfo => ({
     userinfo: async () => {
-      if (userinfo instanceof Error) throw userinfo;
-      return userinfo;
+        if (userinfo instanceof Error) {
+            throw userinfo;
+        }
+        return userinfo;
     },
-  };
-}
+});
 
 // ---------------------------------------------------------------- 1. UID 通过
 
 try {
-  await sessionLiveness.assertAlive(fakeBot({ name: "100000000" }), WIKI_KEY);
-  report("UID 身份放行", true, "name=100000000");
+    await sessionLiveness.assertAlive(fakeBot({ name: '100000000' }), WIKI_KEY);
+    report('UID 身份放行', true, 'name=100000000');
 } catch (err) {
-  report("UID 身份放行", false, err.message);
+    report('UID 身份放行', false, err.message);
 }
 
-report("isBilibiliUid 判定纯数字", isBilibiliUid("100000000") && !isBilibiliUid("203.0.113.7"), "");
+report('isBilibiliUid 判定纯数字', isBilibiliUid('100000000') && !isBilibiliUid('203.0.113.7'), '');
 
 // ---------------------------------------------------------------- 4. 传输失败不算死亡
 
@@ -66,35 +68,39 @@ report("isBilibiliUid 判定纯数字", isBilibiliUid("100000000") && !isBilibil
 // recorded, later assertions would only be reading that record back.
 const beforeDeath = sessionLiveness.deathReason;
 try {
-  await sessionLiveness.assertAlive(fakeBot(new Error("ECONNRESET")), WIKI_KEY);
-  report("传输失败不计为登出", false, "错误被吞掉了");
+    await sessionLiveness.assertAlive(fakeBot(new Error('ECONNRESET')), WIKI_KEY);
+    report('传输失败不计为登出', false, '错误被吞掉了');
 } catch (err) {
-  const isDeath = err instanceof SessionExpiredError;
-  report(
-    "传输失败不计为登出",
-    !isDeath && beforeDeath === null && sessionLiveness.deathReason === null,
-    `抛出 ${err.name}: ${err.message.slice(0, 60)}`,
-  );
+    const isDeath = err instanceof SessionExpiredError;
+    report(
+        '传输失败不计为登出',
+        !isDeath && beforeDeath === null && sessionLiveness.deathReason === null,
+        `抛出 ${err.name}: ${err.message.slice(0, 60)}`,
+    );
 }
 
 // ---------------------------------------------------------------- 2. IP 判死
 
 let deathRecorded = null;
-sessionLiveness.setDeathHandler((reason) => {
-  deathRecorded = reason;
+sessionLiveness.setDeathHandler(reason => {
+    deathRecorded = reason;
 });
 
 try {
-  await sessionLiveness.assertAlive(fakeBot({ name: "203.0.113.7" }), WIKI_KEY);
-  report("匿名身份（IP）判为失效", false, "被放行了");
+    await sessionLiveness.assertAlive(fakeBot({ name: '203.0.113.7' }), WIKI_KEY);
+    report('匿名身份（IP）判为失效', false, '被放行了');
 } catch (err) {
-  report(
-    "匿名身份（IP）判为失效",
-    err instanceof SessionExpiredError && sessionLiveness.deathReason !== null,
-    err.message.slice(0, 140),
-  );
-  report("死亡处理器被调用", typeof deathRecorded === "string" && deathRecorded.length > 0, String(deathRecorded).slice(0, 100));
-  report("原因里点明要重新登录", /bwiki-login/.test(sessionLiveness.deathReason ?? ""), "");
+    report(
+        '匿名身份（IP）判为失效',
+        err instanceof SessionExpiredError && sessionLiveness.deathReason !== null,
+        err.message.slice(0, 140),
+    );
+    report(
+        '死亡处理器被调用',
+        typeof deathRecorded === 'string' && deathRecorded.length > 0,
+        String(deathRecorded).slice(0, 100),
+    );
+    report('原因里点明要重新登录', /bwiki-login/.test(sessionLiveness.deathReason ?? ''), '');
 }
 
 // ---------------------------------------------------------------- 3. 结论是黏的
@@ -103,24 +109,24 @@ try {
 // known dead, every later write is refused without another round-trip.
 let probedAgain = false;
 const watchingBot = {
-  userinfo: async () => {
-    probedAgain = true;
-    return { name: "100000000" };
-  },
+    userinfo: async () => {
+        probedAgain = true;
+        return { name: '100000000' };
+    },
 };
 try {
-  await sessionLiveness.assertAlive(watchingBot, WIKI_KEY);
-  report("失效后结论保持", false, "第二次被放行");
+    await sessionLiveness.assertAlive(watchingBot, WIKI_KEY);
+    report('失效后结论保持', false, '第二次被放行');
 } catch (err) {
-  report(
-    "失效后结论保持",
-    err instanceof SessionExpiredError && probedAgain === false,
-    `未再探测 wiki（probedAgain=${probedAgain}）`,
-  );
+    report(
+        '失效后结论保持',
+        err instanceof SessionExpiredError && probedAgain === false,
+        `未再探测 wiki（probedAgain=${probedAgain}）`,
+    );
 }
 
 // ---------------------------------------------------------------- summary
 
-const failed = results.filter((r) => !r.ok);
+const failed = results.filter(r => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} 通过`);
 process.exit(failed.length > 0 ? 1 : 0);

@@ -1,5 +1,7 @@
 # BWiki MCP Server
 
+本仓库修改自 [aspd199/bwiki-mcp-server](https://github.com/aspd199/bwiki-mcp-server)。
+
 一个 MCP（Model Context Protocol）服务器，让 LLM 客户端以自己登录的 bilibili 账号读写的 [BWiki](https://wiki.biligame.com)——bilibili 旗下游戏 WIKI 所在的 wiki 农场。
 
 ## 特性
@@ -17,49 +19,49 @@
 
 ### 页面读操作
 
-| 名称 | 说明 |
-|---|---|
-| `compare-pages` | 按版本号、标题或指定 wikitext 对比同一页面的两个版本。 |
-| `get-category-members` | 列出分类成员（每次最多 500 条，用 `continueFrom` 翻页）。 |
-| `get-file` | 获取一个文件页面。 |
-| `get-file-data` | 以内联 base64 返回图片字节，供模型直接查看。返回缩放后的版本（用 `width` 指定）；不可渲染的类型会报错。 |
-| `get-links-here` | 列出引用了某页面的页面，包含经由重定向到达的（每次最多 500 条）。 |
-| `get-page` | 获取一个 wiki 页面。 |
-| `get-page-history` | 列出页面的近期修订。 |
-| `get-pages` | 一次获取多个页面（最多 50 个）。 |
-| `get-recent-changes` | 列出全站近期变更，可按时间、命名空间、用户、标签、类型过滤。 |
-| `get-revision` | 获取页面的指定修订版本。 |
-| `get-site-info` | 获取站点的关键设置：MediaWiki 版本、内容语言、命名空间、已安装扩展、许可协议。 |
-| `list-pages` | 按命名空间列出页面，按标题排序（每次最多 500 条，用 `continueFrom` 翻页）。 |
-| `list-wikis` | 列出农场内的 WIKI——代号、站点名、地址、是否只读或默认，以及是否已在本地配置。支持 `limit`、`query`、`configuredOnly`。 |
-| `parse-wikitext` | 把 wikitext 渲染成 HTML，不保存。 |
-| `search-page` | 对页面标题与正文做全文搜索。 |
-| `search-page-by-prefix` | 按标题前缀搜索页面。 |
-| `whoami` | 报告当前会话认证的身份——用户名、是否匿名、所属用户组。 |
+| 名称                    | 说明                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `compare-pages`         | 按版本号、标题或指定 wikitext 对比同一页面的两个版本。                                                                 |
+| `get-category-members`  | 列出分类成员（每次最多 500 条，用 `continueFrom` 翻页）。                                                              |
+| `get-file`              | 获取一个文件页面。                                                                                                     |
+| `get-file-data`         | 以内联 base64 返回图片字节，供模型直接查看。返回缩放后的版本（用 `width` 指定）；不可渲染的类型会报错。                |
+| `get-links-here`        | 列出引用了某页面的页面，包含经由重定向到达的（每次最多 500 条）。                                                      |
+| `get-page`              | 获取一个 wiki 页面。                                                                                                   |
+| `get-page-history`      | 列出页面的近期修订。                                                                                                   |
+| `get-pages`             | 一次获取多个页面（最多 50 个）。                                                                                       |
+| `get-recent-changes`    | 列出全站近期变更，可按时间、命名空间、用户、标签、类型过滤。                                                           |
+| `get-revision`          | 获取页面的指定修订版本。                                                                                               |
+| `get-site-info`         | 获取站点的关键设置：MediaWiki 版本、内容语言、命名空间、已安装扩展、许可协议。                                         |
+| `list-pages`            | 按命名空间列出页面，按标题排序（每次最多 500 条，用 `continueFrom` 翻页）。                                            |
+| `list-wikis`            | 列出农场内的 WIKI——代号、站点名、地址、是否只读或默认，以及是否已在本地配置。支持 `limit`、`query`、`configuredOnly`。 |
+| `parse-wikitext`        | 把 wikitext 渲染成 HTML，不保存。                                                                                      |
+| `search-page`           | 对页面标题与正文做全文搜索。                                                                                           |
+| `search-page-by-prefix` | 按标题前缀搜索页面。                                                                                                   |
+| `whoami`                | 报告当前会话认证的身份——用户名、是否匿名、所属用户组。                                                                 |
 
 ### 页面写操作
 
 写操作要求已登录，且账号在目标站点具备相应的用户权限。
 
-| 名称 | 说明 |
-|---|---|
-| `create-page` | 创建新页面。 |
-| `delete-page` | 删除页面。 |
-| `move-page` | 移动（重命名）页面。 |
-| `protect-page` | 保护或取消保护页面。 |
-| `undelete-page` | 恢复已删除的页面。 |
-| `update-file` | 用本地文件上传文件的新版本。 |
-| `update-file-from-url` | 用 URL 上传文件的新版本。 |
-| `update-page` | 覆盖页面、在末尾追加或开头插入内容，或只改写其中一段。 |
-| `upload-file` | 从本地文件上传新文件。 |
-| `upload-file-from-url` | 从 URL 上传新文件。 |
+| 名称                   | 说明                                                   |
+| ---------------------- | ------------------------------------------------------ |
+| `create-page`          | 创建新页面。                                           |
+| `delete-page`          | 删除页面。                                             |
+| `move-page`            | 移动（重命名）页面。                                   |
+| `protect-page`         | 保护或取消保护页面。                                   |
+| `undelete-page`        | 恢复已删除的页面。                                     |
+| `update-file`          | 用本地文件上传文件的新版本。                           |
+| `update-file-from-url` | 用 URL 上传文件的新版本。                              |
+| `update-page`          | 覆盖页面、在末尾追加或开头插入内容，或只改写其中一段。 |
+| `upload-file`          | 从本地文件上传新文件。                                 |
+| `upload-file-from-url` | 从 URL 上传新文件。                                    |
 
 ### 会话管理
 
-| 名称 | 说明 |
-|---|---|
-| `bwiki-login` | 打开官方 bilibili 登录页，等待登录完成并保存会话。唯一无需会话即可运行的工具。 |
-| `bwiki-logout` | 删除已保存的会话。 |
+| 名称           | 说明                                                                           |
+| -------------- | ------------------------------------------------------------------------------ |
+| `bwiki-login`  | 打开官方 bilibili 登录页，等待登录完成并保存会话。唯一无需会话即可运行的工具。 |
+| `bwiki-logout` | 删除已保存的会话。                                                             |
 
 ### 扩展包
 
@@ -67,14 +69,15 @@
 
 **Semantic MediaWiki**
 
-| 名称 | 说明 |
-|---|---|
+| 名称                  | 说明                                                              |
+| --------------------- | ----------------------------------------------------------------- |
 | `smw-list-properties` | 列出 Semantic MediaWiki 属性，并附可直接复制的 `smw-query` 模板。 |
-| `smw-query` | 执行 Semantic MediaWiki 的 `#ask` 查询。 |
+| `smw-query`           | 执行 Semantic MediaWiki 的 `#ask` 查询。                          |
 
 ## 环境要求
 
-- Node.js 20 或更高版本。
+- Node.js 22.12 或更高版本。
+- pnpm 11 或更高版本（`package.json` 的 `packageManager` 固定为 pnpm 12.6.0；启用 Corepack 时会自动使用该版本）。
 - 已安装 Microsoft Edge 或 Google Chrome。登录流程通过 `puppeteer-core` 驱动其中之一，不会额外下载浏览器。
 - 一个 bilibili 账号，且具备你要调用的工具所需的用户权限。
 
@@ -85,8 +88,8 @@
 ```bash
 git clone https://github.com/aspd199/bwiki-mcp-server.git bwiki-mcp-server
 cd bwiki-mcp-server
-npm install
-npm run build && npm run bundle
+pnpm install
+pnpm build        # 一次完成 TypeScript 编译与单文件打包
 ```
 
 然后把 `config.example.json` 复制为 `config.json`，填入要使用的站点（见[配置](#配置)）。没有配置文件时服务器拒绝启动。
@@ -97,26 +100,26 @@ npm run build && npm run bundle
 
 多数客户端读取同一套服务器配置块。把它粘贴到下表对应的文件中，并把 `mcpServers` 换成该客户端的根键：
 
-| 客户端 | 配置文件 | 根键 |
-| --- | --- | --- |
-| Cursor | `~/.cursor/mcp.json`，或项目内 `.cursor/mcp.json` | `mcpServers` |
-| VS Code | 工作区 `.vscode/mcp.json`，或命令 **MCP: Open User Configuration** | `servers` |
-| Claude Desktop | `claude_desktop_config.json` | `mcpServers` |
-| Devin Desktop（原 Windsurf） | `~/.codeium/windsurf/mcp_config.json` | `mcpServers` |
-| Zed | `~/.config/zed/settings.json` | `context_servers` |
-| LM Studio | `~/.lmstudio/mcp.json` | `mcpServers` |
+| 客户端                       | 配置文件                                                           | 根键              |
+| ---------------------------- | ------------------------------------------------------------------ | ----------------- |
+| Cursor                       | `~/.cursor/mcp.json`，或项目内 `.cursor/mcp.json`                  | `mcpServers`      |
+| VS Code                      | 工作区 `.vscode/mcp.json`，或命令 **MCP: Open User Configuration** | `servers`         |
+| Claude Desktop               | `claude_desktop_config.json`                                       | `mcpServers`      |
+| Devin Desktop（原 Windsurf） | `~/.codeium/windsurf/mcp_config.json`                              | `mcpServers`      |
+| Zed                          | `~/.config/zed/settings.json`                                      | `context_servers` |
+| LM Studio                    | `~/.lmstudio/mcp.json`                                             | `mcpServers`      |
 
 ```json
 {
-  "mcpServers": {
-    "bwiki-mcp-server": {
-      "command": "node",
-      "args": ["/absolute/path/to/bwiki-mcp-server/dist/bundle.cjs"],
-      "env": {
-        "CONFIG": "/absolute/path/to/bwiki-mcp-server/config.json"
-      }
+    "mcpServers": {
+        "bwiki-mcp-server": {
+            "command": "node",
+            "args": ["/absolute/path/to/bwiki-mcp-server/dist/bundle.cjs"],
+            "env": {
+                "CONFIG": "/absolute/path/to/bwiki-mcp-server/config.json"
+            }
+        }
     }
-  }
 }
 ```
 
@@ -132,16 +135,16 @@ OpenCode 使用自己的配置结构而非 `mcpServers`；把下面这段加入�
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "bwiki-mcp-server": {
-      "type": "local",
-      "command": ["node", "/absolute/path/to/dist/bundle.cjs"],
-      "environment": {
-        "CONFIG": "/absolute/path/to/config.json"
-      }
+    "$schema": "https://opencode.ai/config.json",
+    "mcp": {
+        "bwiki-mcp-server": {
+            "type": "local",
+            "command": ["node", "/absolute/path/to/dist/bundle.cjs"],
+            "environment": {
+                "CONFIG": "/absolute/path/to/config.json"
+            }
+        }
     }
-  }
 }
 ```
 
@@ -153,24 +156,24 @@ OpenCode 使用自己的配置结构而非 `mcpServers`；把下面这段加入�
 
 ```json
 {
-  "wikis": ["你的站点代号"]
+    "wikis": ["你的站点代号"]
 }
 ```
 
-| 字段 | 必填 | 说明 |
-|---|---|---|
-| `wikis` | 是 | 要使用的站点代号数组，第一个即默认站点（工具调用省略 `wiki` 参数时用它）。至少填一个，否则服务器拒绝启动。 |
-| `uploadDirs` | 否 | 上传工具允许读取的绝对路径目录。不填或空数组即禁用上传。见[上传目录](#上传目录)。 |
+| 字段         | 必填 | 说明                                                                                                       |
+| ------------ | ---- | ---------------------------------------------------------------------------------------------------------- |
+| `wikis`      | 是   | 要使用的站点代号数组，第一个即默认站点（工具调用省略 `wiki` 参数时用它）。至少填一个，否则服务器拒绝启动。 |
+| `uploadDirs` | 否   | 上传工具允许读取的绝对路径目录。不填或空数组即禁用上传。见[上传目录](#上传目录)。                          |
 
 站点代号怎么查：调用 `list-wikis` 工具，它会列出整个农场的代号。例如 `["station-a", "station-b"]` 表示同时配置两个站点。
 
 由代号自动推出的值（不需要也不允许写在配置里）：
 
-| 推出项 | 规则 |
-|---|---|
-| 站点地址 | `https://wiki.biligame.com/<代号>` |
-| 页面路径 | `/<代号>` |
-| API 入口 | `https://wiki.biligame.com/<代号>/api.php` |
+| 推出项   | 规则                                                   |
+| -------- | ------------------------------------------------------ |
+| 站点地址 | `https://wiki.biligame.com/<代号>`                     |
+| 页面路径 | `/<代号>`                                              |
+| API 入口 | `https://wiki.biligame.com/<代号>/api.php`             |
 | 站点名称 | 从 wiki 自身的 siteinfo 实时读取，配置文件无法与之不符 |
 
 写成旧的对象格式（`{"wikis": {"代号": {}}}`）会被明确拒绝并提示改为数组，而不是静默忽略。
@@ -191,19 +194,19 @@ uploads are disabled on this server (no upload directories configured).
 
 ```json
 {
-  "wikis": ["你的站点代号"],
-  "uploadDirs": ["D:/Pictures/wiki", "/home/me/wiki-assets"]
+    "wikis": ["你的站点代号"],
+    "uploadDirs": ["D:/Pictures/wiki", "/home/me/wiki-assets"]
 }
 ```
 
 规则：
 
-| 规则 | 说明 |
-|---|---|
-| 必须是绝对路径 | 相对路径在加载时报错 |
-| 目录必须已存在 | 启动时解析真实路径，不存在则拒绝启动 |
+| 规则                     | 说明                                               |
+| ------------------------ | -------------------------------------------------- |
+| 必须是绝对路径           | 相对路径在加载时报错                               |
+| 目录必须已存在           | 启动时解析真实路径，不存在则拒绝启动               |
 | 须在允许目录或其子目录下 | 调用方给出的文件路径经 `realpath` 解析后按前缀匹配 |
-| 符号链接按其真实位置判定 | 允许目录内的链接若指向外部，该文件仍会被拒绝 |
+| 符号链接按其真实位置判定 | 允许目录内的链接若指向外部，该文件仍会被拒绝       |
 
 也可以用环境变量 `MCP_UPLOAD_DIRS`，以 `:` 分隔，与配置项合并生效。
 
@@ -238,16 +241,16 @@ uploads are disabled on this server (no upload directories configured).
 
 ## 环境变量
 
-| 名称 | 说明 | 默认值 |
-|---|---|---|
-| `CONFIG` | 配置文件路径 | `config.json` |
-| `MCP_LOG_LEVEL` | 日志最低级别。可选 `debug`、`info`、`notice`、`warning`、`error`、`critical`、`alert`、`emergency`、`silent`。 | `debug` |
-| `MCP_CONTENT_MAX_BYTES` | 工具返回内容正文的字节上限，按每个响应计一次。可按所用客户端的响应预算调整。 | `75000` |
-| `MCP_FILE_DATA_MAX_BYTES` | `get-file-data` 响应中 base64 数据的硬上限。超限的调用直接报错，不截断。 | `1000000` |
-| `MCP_UPLOAD_MAX_BYTES` | `*-from-url` 上传工具在服务端抓取时的内存上限。超出该大小的文件会转交 wiki 自身的复制上传，不在本服务器缓存。 | `104857600` |
-| `MCP_UPLOAD_DIRS` | 上传工具允许读取的绝对路径目录，以 `:` 分隔。与 `uploadDirs` 合并生效。 | 未设置 |
-| `MCP_USER_AGENT` | 替换所有外部请求的 `User-Agent` 头。不设置时使用内置的 Chrome 桌面版 UA。 | 内置 Chrome UA |
-| `MCP_TRUSTED_HOSTS` | 有外发 SSRF 防护：解析到私有或回环地址的目标一律拒绝，此变量列出的主机可豁免。 | 未设置 |
+| 名称                      | 说明                                                                                                           | 默认值         |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------- |
+| `CONFIG`                  | 配置文件路径                                                                                                   | `config.json`  |
+| `MCP_LOG_LEVEL`           | 日志最低级别。可选 `debug`、`info`、`notice`、`warning`、`error`、`critical`、`alert`、`emergency`、`silent`。 | `debug`        |
+| `MCP_CONTENT_MAX_BYTES`   | 工具返回内容正文的字节上限，按每个响应计一次。可按所用客户端的响应预算调整。                                   | `75000`        |
+| `MCP_FILE_DATA_MAX_BYTES` | `get-file-data` 响应中 base64 数据的硬上限。超限的调用直接报错，不截断。                                       | `1000000`      |
+| `MCP_UPLOAD_MAX_BYTES`    | `*-from-url` 上传工具在服务端抓取时的内存上限。超出该大小的文件会转交 wiki 自身的复制上传，不在本服务器缓存。  | `104857600`    |
+| `MCP_UPLOAD_DIRS`         | 上传工具允许读取的绝对路径目录，以 `:` 分隔。与 `uploadDirs` 合并生效。                                        | 未设置         |
+| `MCP_USER_AGENT`          | 替换所有外部请求的 `User-Agent` 头。不设置时使用内置的 Chrome 桌面版 UA。                                      | 内置 Chrome UA |
+| `MCP_TRUSTED_HOSTS`       | 有外发 SSRF 防护：解析到私有或回环地址的目标一律拒绝，此变量列出的主机可豁免。                                 | 未设置         |
 
 ## 安全
 
@@ -261,28 +264,36 @@ uploads are disabled on this server (no upload directories configured).
 ## 开发
 
 ```bash
-npm run build              # 编译 TypeScript 到 dist/
-npm run bundle             # 打包为 dist/bundle.cjs
-npm run typecheck          # tsc --noEmit
-npm test                   # 针对构建产物的 stdio 冒烟测试
-npm run test:guard         # 会话存活守卫的单元检查
-npm run test:boot-session  # 启动期会话校验行为
+pnpm run build              # tsc + esbuild，一步产出 dist/ 与 dist/bundle.cjs
+pnpm run build:src          # 只编译 TypeScript 到 dist/
+pnpm run bundle             # 只打包为 dist/bundle.cjs
+pnpm run clean:dist         # 删除 dist/
+pnpm run lint               # oxlint（含 type-aware 检查）
+pnpm run lint:fix           # 自动修复 lint 问题
+pnpm run format             # oxfmt 格式化
+pnpm run format:check       # 检查格式
+pnpm run typecheck          # tsc --noEmit
+pnpm test                   # 针对构建产物的 stdio 冒烟测试
+pnpm run test:guard         # 会话存活守卫的单元检查
+pnpm run test:boot-session  # 启动期会话校验行为
 ```
 
-`npm run test:writes` 会完整走一遍写路径——创建、读回、修改、验证、查历史、删除——在真实 wiki 上留下真实页面。它不在 `npm test` 之内，不得无人值守地运行。
+`pnpm run test:writes` 会完整走一遍写路径——创建、读回、修改、验证、查历史、删除——在真实 wiki 上留下真实页面。它不在 `pnpm test` 之内，不得无人值守地运行。
 
-`npm publish` 前会自动执行构建（`prepublishOnly` 钩子），无需手动跑 `build` 与 `bundle`。
+`pnpm publish` 前会自动执行构建（`prepack` 钩子），无需手动跑 `build`。
 
 ### 目录结构
 
-- `src/mediawiki/` — 工具实现与运行时，由 [ProfessionalWiki/MediaWiki-MCP-Server](https://github.com/ProfessionalWiki/MediaWiki-MCP-Server)（MIT）改编而来。
-- `src/mediawiki/bwiki/` — BWiki 专有层：通行证登录、会话拦截、运行期存活校验、请求限速、农场名册、身份判定。
-- `src/mediawiki/tools/` — 每个工具一个文件。
-- `src/mediawiki/wikis/` — 站点注册与选择，以及负责注入会话 cookie、控制请求节奏的 mwn 提供层。
-- `src/mediawiki/runtime/` — 上下文、调度、注册、日志与关闭处理。
+- `src/` — 服务入口、工具实现与运行时，由 [ProfessionalWiki/MediaWiki-MCP-Server](https://github.com/ProfessionalWiki/MediaWiki-MCP-Server)（MIT）改编而来。
+- `src/bwiki/` — BWiki 专有层：通行证登录、会话拦截、运行期存活校验、请求限速、农场名册、身份判定。
+- `src/tools/` — 每个工具一个文件。
+- `src/wikis/` — 站点注册与选择，以及负责注入会话 cookie、控制请求节奏的 mwn 提供层。
+- `src/runtime/` — 上下文、调度、注册、日志与关闭处理。
+- `src/LICENSE` — 上游 Professional Wiki 的 MIT 许可原文。
 - `scripts/` — 构建与探针脚本。
 - `docs/` — 登录方案、mwn 兼容性、会话失效处理的结论记录。
+- `.oxlintrc.json` / `.oxfmtrc.json` — lint 与格式化配置。
 
 ## 许可
 
-MIT。`src/mediawiki/` 的部分代码改编自 [MediaWiki-MCP-Server](https://github.com/ProfessionalWiki/MediaWiki-MCP-Server)，该项目的许可同样是 MIT。
+MIT。`src/` 的部分代码改编自 [MediaWiki-MCP-Server](https://github.com/ProfessionalWiki/MediaWiki-MCP-Server)，该项目的许可同样是 MIT。
