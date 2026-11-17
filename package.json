@@ -26,12 +26,12 @@
         "lint:fix": "oxlint --fix",
         "prepack": "pnpm run build",
         "start": "node dist/stdio.js",
-        "test": "node scripts/smoke-stdio.mjs",
+        "test": "vitest run",
         "test:boot-session": "node scripts/probe-liveness.mjs",
-        "test:guard": "node scripts/probe-liveness-guard.mjs",
-        "test:summary": "node scripts/probe-edit-summary.mjs",
+        "test:smoke": "node scripts/smoke-stdio.mjs",
+        "test:watch": "vitest",
         "test:writes": "node scripts/probe-writes.mjs",
-        "typecheck": "tsc -p tsconfig.json --noEmit"
+        "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json"
     },
     "dependencies": {
         "@modelcontextprotocol/node": "^2.1.1",
@@ -46,11 +46,12 @@
     },
     "devDependencies": {
         "@types/node": "^22.10.0",
-        "esbuild": "^0.25.0",
+        "esbuild": "^0.28.2",
         "oxfmt": "^0.78.0",
         "oxlint": "^1.93.0",
         "oxlint-tsgolint": "^7.0.2007",
-        "typescript": "^5.9.2"
+        "typescript": "^5.9.2",
+        "vitest": "^5.1.0"
     },
     "engines": {
         "node": ">=22.12.0",

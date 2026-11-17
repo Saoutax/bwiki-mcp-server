@@ -326,18 +326,21 @@ pnpm run lint               # oxlint（含 type-aware 检查）
 pnpm run lint:fix           # 自动修复 lint 问题
 pnpm run format             # oxfmt 格式化
 pnpm run format:check       # 检查格式
-pnpm run typecheck          # tsc --noEmit
-pnpm test                   # 针对构建产物的 stdio 冒烟测试
-pnpm run test:guard         # 会话存活守卫的单元检查
+pnpm run typecheck          # tsc --noEmit（src/ 与 tests/）
+pnpm test                   # vitest 单元测试（离线，无需构建）
+pnpm run test:watch         # vitest 监视模式
+pnpm run test:smoke         # 针对构建产物的 stdio 冒烟测试（需先 build，且需网络）
 pnpm run test:boot-session  # 启动期会话校验行为
-pnpm run test:summary       # 编辑摘要与变更标签配置的离线检查
+pnpm run test:writes        # 写路径全流程
 ```
+
+`tests/` 下的单元测试直接导入 `src/`，不需要先构建，也不读 `config.json`、不联网。`scripts/` 里剩下的是需要真实会话、真实网络或会写真实页面的探针（`probe-liveness.mjs`、`probe-writes.mjs`、`probe-mwn-auth.mjs`、`probe-mwn-compat.mjs`、`probe-referer.mjs`、`probe-cookie-jar.mjs`），属手工工具，不在 `pnpm test` 之内。
 
 `pnpm run test:writes` 会完整走一遍写路径——创建、读回、修改、验证、查历史、删除——在真实 wiki 上留下真实页面。它不在 `pnpm test` 之内，不得无人值守地运行。
 
 发布由 release-please 管理：合并 release PR 后自动创建 tag 与 GitHub Release，并把 `dist/bundle.cjs` 与 `config.example.json` 上传为附件。`pnpm publish` 仍可手动发布到 npm（`prepack` 会自动构建）。
 
-CI 在 Node 22/24/26 上运行 lint、format check、typecheck、build 与离线守卫测试。
+CI 在 Node 22/24/26 上运行 lint、format check、typecheck、build 与 vitest 单元测试。
 
 ### 目录结构
 
@@ -347,7 +350,8 @@ CI 在 Node 22/24/26 上运行 lint、format check、typecheck、build 与离线
 - `src/wikis/` — 站点注册与选择，以及负责注入会话 cookie、控制请求节奏的 mwn 提供层。
 - `src/runtime/` — 上下文、调度、注册、日志与关闭处理。
 - `src/LICENSE` — 上游 Professional Wiki 的 MIT 许可原文。
-- `scripts/` — 构建与探针脚本。
+- `tests/` — vitest 单元测试，直接导入 `src/`，离线运行。
+- `scripts/` — 构建脚本与需要真实会话/网络的手工探针。
 - `docs/` — 登录方案、mwn 兼容性、会话失效处理的结论记录。
 - `.oxlintrc.json` / `.oxfmtrc.json` — lint 与格式化配置。
 - `.github/workflows/` — CI 与 release-please 工作流。
