@@ -86,7 +86,7 @@
 先构建服务器，再把 MCP 客户端指向构建产物。
 
 ```bash
-git clone https://github.com/aspd199/bwiki-mcp-server.git bwiki-mcp-server
+git clone https://github.com/Saoutax/bwiki-mcp-server.git bwiki-mcp-server
 cd bwiki-mcp-server
 pnpm install
 pnpm build        # 一次完成 TypeScript 编译与单文件打包
