@@ -19,7 +19,7 @@
 
 import type { Mwn } from 'mwn';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { isBilibiliUid, SessionExpiredError, sessionLiveness } from '../../src/bwiki/liveness.ts';
+import { isBilibiliUid, SessionExpiredError, sessionLiveness } from '../src/bwiki/liveness.ts';
 
 const WIKI_KEY = 'test-wiki';
 

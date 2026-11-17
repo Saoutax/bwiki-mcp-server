@@ -13,12 +13,12 @@ import {
     DEFAULT_EDIT_SUMMARY,
     renderEditSummary,
     resolveEditSummary,
-} from '../../src/config/editSummary.ts';
-import { resolveEditTags } from '../../src/config/editTags.ts';
-import { resolveConfig } from '../../src/config/loadConfig.ts';
-import type { ToolContext } from '../../src/runtime/context.ts';
-import { EditServiceImpl } from '../../src/services/editService.ts';
-import { formatEditComment } from '../../src/wikis/utils.ts';
+} from '../src/config/editSummary.ts';
+import { resolveEditTags } from '../src/config/editTags.ts';
+import { resolveConfig } from '../src/config/loadConfig.ts';
+import type { ToolContext } from '../src/runtime/context.ts';
+import { EditServiceImpl } from '../src/services/editService.ts';
+import { formatEditComment } from '../src/wikis/utils.ts';
 
 describe('默认文案', () => {
     it('默认设置与历史文案逐字一致', () => {

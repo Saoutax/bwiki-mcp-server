@@ -12,7 +12,7 @@ import { createServer } from 'node:http';
 import type { IncomingHttpHeaders, Server } from 'node:http';
 import { Mwn } from 'mwn';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { refererFor, USER_AGENT } from '../../src/runtime/constants.ts';
+import { refererFor, USER_AGENT } from '../src/runtime/constants.ts';
 
 // 监听器收到的每个请求的头。
 const seen: IncomingHttpHeaders[] = [];
