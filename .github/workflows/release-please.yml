@@ -1,0 +1,59 @@
+name: Release Please
+
+on:
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+permissions:
+    contents: write
+    pull-requests: write
+
+jobs:
+    release-please:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Run release-please
+              id: release
+              uses: googleapis/release-please-action@v5
+              with:
+                  # 配置 PAT 后，release-please 创建的 PR 才会触发 CI；未配置时使用默认 GITHUB_TOKEN。
+                  token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+                  config-file: release-please-config.json
+                  manifest-file: .release-please-manifest.json
+
+            - name: Checkout release tag
+              if: ${{ steps.release.outputs.release_created == 'true' }}
+              uses: actions/checkout@v7
+              with:
+                  ref: ${{ steps.release.outputs.tag_name }}
+
+            - name: Set up pnpm
+              if: ${{ steps.release.outputs.release_created == 'true' }}
+              uses: pnpm/action-setup@v6
+              with:
+                  version: 12.6.0
+
+            - name: Set up Node.js
+              if: ${{ steps.release.outputs.release_created == 'true' }}
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 22
+                  cache: pnpm
+
+            - name: Install dependencies
+              if: ${{ steps.release.outputs.release_created == 'true' }}
+              run: pnpm install --frozen-lockfile
+
+            - name: Build bundle
+              if: ${{ steps.release.outputs.release_created == 'true' }}
+              run: pnpm run build
+
+            - name: Upload bundle to GitHub Release
+              if: ${{ steps.release.outputs.release_created == 'true' }}
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG_NAME: ${{ steps.release.outputs.tag_name }}
+              run: |
+                  cp dist/bundle.cjs "dist/bwiki-mcp-server-${TAG_NAME}.cjs"
+                  gh release upload "$TAG_NAME" "dist/bwiki-mcp-server-${TAG_NAME}.cjs" config.example.json --clobber

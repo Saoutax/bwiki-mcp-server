@@ -96,6 +96,21 @@ pnpm build        # 一次完成 TypeScript 编译与单文件打包
 
 构建产出 `dist/bundle.cjs`，单文件，不依赖 `node_modules`。
 
+### 从 GitHub Release 使用
+
+不想从源码构建时，可以直接下载最新 GitHub Release 中的：
+
+- `bwiki-mcp-server-<版本>.cjs`：已内联全部依赖（含 `puppeteer-core`），无需 `node_modules`
+- `config.example.json`
+
+要求与源码安装相同：Node.js 22.12+，本机已安装 Edge 或 Chrome。把 `config.example.json` 复制为 `config.json` 并填入站点代号，首次使用执行：
+
+```bash
+node /path/to/bwiki-mcp-server-<版本>.cjs login
+```
+
+然后在 MCP 客户端中把 `args` 指向该 `.cjs` 文件、`CONFIG` 指向 `config.json`（见下方标准配置）。
+
 ### 标准配置
 
 多数客户端读取同一套服务器配置块。把它粘贴到下表对应的文件中，并把 `mcpServers` 换成该客户端的根键：
@@ -280,7 +295,9 @@ pnpm run test:boot-session  # 启动期会话校验行为
 
 `pnpm run test:writes` 会完整走一遍写路径——创建、读回、修改、验证、查历史、删除——在真实 wiki 上留下真实页面。它不在 `pnpm test` 之内，不得无人值守地运行。
 
-`pnpm publish` 前会自动执行构建（`prepack` 钩子），无需手动跑 `build`。
+发布由 release-please 管理：合并 release PR 后自动创建 tag 与 GitHub Release，并把 `dist/bundle.cjs` 与 `config.example.json` 上传为附件。`pnpm publish` 仍可手动发布到 npm（`prepack` 会自动构建）。
+
+CI 在 Node 22/24/26 上运行 lint、format check、typecheck、build 与离线守卫测试。
 
 ### 目录结构
 
@@ -293,6 +310,8 @@ pnpm run test:boot-session  # 启动期会话校验行为
 - `scripts/` — 构建与探针脚本。
 - `docs/` — 登录方案、mwn 兼容性、会话失效处理的结论记录。
 - `.oxlintrc.json` / `.oxfmtrc.json` — lint 与格式化配置。
+- `.github/workflows/` — CI 与 release-please 工作流。
+- `release-please-config.json` / `.release-please-manifest.json` — release-please 配置与版本基线。
 
 ## 许可
 
