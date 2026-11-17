@@ -144,9 +144,15 @@ try {
     if (refusedForNoSession(res)) {
         report('get-page 未登录时被拒', true, text.slice(0, 120));
     } else {
+        // 首页的 wikitext 可能只是一句模板引用（如 {{首页}}），返回的正文本来就短，
+        // 用“长度 > N”判断内容是否读到会误报。改看结构化载荷：content=source 时
+        // 至少带回 source 或 latestRevisionId。
+        const structured = res.structuredContent ?? {};
         report(
             'get-page 读到内容',
-            text.length > 50 && !res.isError,
+            !res.isError &&
+                (typeof structured.source === 'string' ||
+                    typeof structured.latestRevisionId === 'number'),
             `返回 ${text.length} 字符: ${text.slice(0, 80).replace(/\n/g, ' ')}`,
         );
     }
@@ -308,4 +314,5 @@ if (failed.length > 0) {
         console.log(`  - ${f.name}`);
     }
 }
-process.exit(0);
+// 失败必须体现在退出码上，否则这条命令永远不会因为冒烟失败而变红。
+process.exit(failed.length > 0 ? 1 : 0);

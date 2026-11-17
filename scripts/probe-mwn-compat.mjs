@@ -329,4 +329,5 @@ if (failed.length > 0) {
         console.log(`  - ${f.name}: ${f.detail}`);
     }
 }
-process.exit(0);
+// 与其他探针一致：失败体现在退出码上，便于 `node …; echo $?` 或 CI 使用。
+process.exit(failed.length > 0 ? 1 : 0);
