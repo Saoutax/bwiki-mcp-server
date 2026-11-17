@@ -54,6 +54,9 @@ jobs:
             - name: Check bundle entry
               run: node dist/bundle.cjs --help
 
+            - name: Offline edit summary tests
+              run: pnpm run test:summary
+
             - name: Offline guard tests
               env:
                   CONFIG: ${{ runner.temp }}/ci-config.json

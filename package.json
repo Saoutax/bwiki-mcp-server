@@ -29,6 +29,7 @@
         "test": "node scripts/smoke-stdio.mjs",
         "test:boot-session": "node scripts/probe-liveness.mjs",
         "test:guard": "node scripts/probe-liveness-guard.mjs",
+        "test:summary": "node scripts/probe-edit-summary.mjs",
         "test:writes": "node scripts/probe-writes.mjs",
         "typecheck": "tsc -p tsconfig.json --noEmit"
     },

@@ -175,10 +175,14 @@ OpenCode 使用自己的配置结构而非 `mcpServers`；把下面这段加入�
 }
 ```
 
-| 字段         | 必填 | 说明                                                                                                       |
-| ------------ | ---- | ---------------------------------------------------------------------------------------------------------- |
-| `wikis`      | 是   | 要使用的站点代号数组，第一个即默认站点（工具调用省略 `wiki` 参数时用它）。至少填一个，否则服务器拒绝启动。 |
-| `uploadDirs` | 否   | 上传工具允许读取的绝对路径目录。不填或空数组即禁用上传。见[上传目录](#上传目录)。                          |
+`config.example.json` 就是这份最小示例，只含必填项。`uploadDirs`、`editSummary`、`editTags` 均为可选项，说明见下表与后续小节。
+
+| 字段          | 必填 | 说明                                                                                                                     |
+| ------------- | ---- | ------------------------------------------------------------------------------------------------------------------------ |
+| `wikis`       | 是   | 要使用的站点代号数组，第一个即默认站点（工具调用省略 `wiki` 参数时用它）。至少填一个，否则服务器拒绝启动。               |
+| `uploadDirs`  | 否   | 上传工具允许读取的绝对路径目录。不填或空数组即禁用上传。见[上传目录](#上传目录)。                                        |
+| `editSummary` | 否   | 编辑摘要生成方式：是否附加来源后缀、自定义模板。不填保持内置文案。见[编辑摘要与变更标签](#编辑摘要与变更标签)。          |
+| `editTags`    | 否   | 写入时附加的 MediaWiki 变更标签，全局作用于所有已配置站点。不填即不打标签。见[编辑摘要与变更标签](#编辑摘要与变更标签)。 |
 
 站点代号怎么查：调用 `list-wikis` 工具，它会列出整个农场的代号。例如 `["station-a", "station-b"]` 表示同时配置两个站点。
 
@@ -226,6 +230,41 @@ uploads are disabled on this server (no upload directories configured).
 也可以用环境变量 `MCP_UPLOAD_DIRS`，以 `:` 分隔，与配置项合并生效。
 
 `upload-file-from-url` 与 `update-file-from-url` 读取的是远程 URL，不受此限制。
+
+### 编辑摘要与变更标签
+
+写工具默认给每次写入附加来源说明：有 `comment` 时是 `<你的 comment> (via <工具名> on MediaWiki MCP Server)`，没有时是 `Automated edit (via <工具名> on MediaWiki MCP Server)`。这两段文案和变更标签都可以在配置里调整：
+
+```json
+{
+    "wikis": ["你的站点代号"],
+    "editSummary": {
+        "attribution": true,
+        "template": "{comment}（via {tool}）",
+        "noCommentTemplate": "自动编辑（via {tool}）"
+    },
+    "editTags": ["bwiki-mcp"]
+}
+```
+
+| 字段                            | 默认值                                                | 说明                                                                                                                                                 |
+| ------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `editSummary.attribution`       | `true`                                                | 为 `false` 时服务器不生成任何文案，只把调用方 `comment` 原样作为摘要；没有 `comment` 就不发摘要参数。此时 `template` 与 `noCommentTemplate` 被忽略。 |
+| `editSummary.template`          | `{comment} (via {tool} on MediaWiki MCP Server)`      | 有 `comment` 时使用。`{comment}` 替换为调用方给的摘要，`{tool}` 替换为工具名。                                                                       |
+| `editSummary.noCommentTemplate` | `Automated edit (via {tool} on MediaWiki MCP Server)` | 调用方未给 `comment` 时使用；其中的 `{comment}` 渲染为空串。                                                                                         |
+| `editTags`                      | `[]`                                                  | 写入时附加的 MediaWiki 变更标签，全局作用于所有已配置站点；空数组表示不发送 `tags` 参数。                                                            |
+
+规则：
+
+| 规则             | 说明                                                                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 占位符           | 只替换 `{comment}` 与 `{tool}`，其它 `{...}` 原样保留；`comment` 内出现的 `{tool}` 不会被二次展开。                                                  |
+| 空摘要           | 模板渲染结果为空时按「未提供」处理，不发送空摘要，以免覆盖 MediaWiki 自己的默认理由。                                                                |
+| 忘记 `{comment}` | `template` 不含 `{comment}` 会丢弃调用方写的理由，启动时打 warning。                                                                                 |
+| 摘要缺失 ≠ 空串  | `attribution: false` 且没有 `comment` 时，删除、恢复、保护类操作省略 `reason`，由 MediaWiki 写入自己的默认理由。                                     |
+| 标签是全局的     | 没有按站点覆盖：每个写入（编辑、创建、删除、恢复、移动、保护、上传）都会带上这些标签。                                                               |
+| 标签前提         | 标签必须在每个已配置站点的 `Special:Tags` 中已定义，且账号具备 `changetags` 权限，否则该站写入会被 wiki 拒绝。不打算给所有站点打同一组标签时请留空。 |
+| 长度             | 超长摘要由 wiki 自身拒绝，本服务不截断；来源后缀会占用摘要长度配额。                                                                                 |
 
 ## 认证
 
@@ -291,6 +330,7 @@ pnpm run typecheck          # tsc --noEmit
 pnpm test                   # 针对构建产物的 stdio 冒烟测试
 pnpm run test:guard         # 会话存活守卫的单元检查
 pnpm run test:boot-session  # 启动期会话校验行为
+pnpm run test:summary       # 编辑摘要与变更标签配置的离线检查
 ```
 
 `pnpm run test:writes` 会完整走一遍写路径——创建、读回、修改、验证、查历史、删除——在真实 wiki 上留下真实页面。它不在 `pnpm test` 之内，不得无人值守地运行。

@@ -7,7 +7,7 @@ import { decodeWikiKey, encodeWikiKey } from '../runtime/wikiKey.ts';
 import { resolveSiteInfo } from '../wikis/siteInfo.ts';
 
 // 按字段名构造对外视图，新增 WikiConfig 字段默认不公开。
-// 凭证与运维设置（OAuth、tags、attributeEdits 等）均不包含在内。
+// 凭证与运维设置（OAuth、editSummary、editTags 等）均不包含在内。
 const toPublicConfig = (wikiConfig: Readonly<WikiConfig>): PublicWikiConfig => ({
     sitename: wikiConfig.sitename,
     server: wikiConfig.server,

@@ -10,11 +10,17 @@ import { registerAllTools } from './tools/index.ts';
 // 这些值由打包器注入，不读 server.json。
 const SERVER_VERSION_STRING: string = SERVER_VERSION;
 
-const SERVER_INSTRUCTIONS: string = `Tools and resources for working with one or more BWiki wikis (wiki.biligame.com). Each configured wiki appears as an \`mcp://wikis/{wikiKey}\` resource. Every tool that operates on a wiki accepts an optional \`wiki\` argument naming the wiki to act on — pass a wiki key (or its \`mcp://wikis/{wikiKey}\` URI). Omit it to use the configured default wiki. There is no stateful "current wiki": each call targets exactly the wiki it names, and every response reports the wiki it ran against. Call \`list-wikis\` to see the whole farm roster and which wikis this server is configured for.
+const ATTRIBUTION_LINE =
+    'Writes, deletes, and uploads act as the signed-in bilibili user, and their edit summaries carry attribution.';
+
+// 归属可被配置关闭，说明文字须随之变化，而不是写死。
+const buildServerInstructions = (
+    attribution: boolean,
+): string => `Tools and resources for working with one or more BWiki wikis (wiki.biligame.com). Each configured wiki appears as an \`mcp://wikis/{wikiKey}\` resource. Every tool that operates on a wiki accepts an optional \`wiki\` argument naming the wiki to act on — pass a wiki key (or its \`mcp://wikis/{wikiKey}\` URI). Omit it to use the configured default wiki. There is no stateful "current wiki": each call targets exactly the wiki it names, and every response reports the wiki it ran against. Call \`list-wikis\` to see the whole farm roster and which wikis this server is configured for.
 
 Authentication is mandatory and is not a tool argument: the server holds a bilibili passport session obtained with \`bwiki-login\`, and every wiki call is made as that user. If the session is missing or the wiki stops recognizing it, the server ends the connection rather than falling back to anonymous access, which would attribute wiki actions to an IP address. Run \`bwiki-login\` again to re-establish it.
 
-Writes, deletes, and uploads act as the signed-in bilibili user, and their edit summaries carry attribution.
+${attribution ? ATTRIBUTION_LINE : 'Writes, deletes, and uploads act as the signed-in bilibili user.'}
 
 Tool errors fall into seven categories: \`not_found\`, \`permission_denied\`, \`invalid_input\`, \`conflict\`, \`authentication\`, \`rate_limited\`, and \`upstream_failure\`. Reads that exceed a per-call cap return a truncation marker describing what was returned and how to fetch the rest.`;
 
@@ -54,7 +60,7 @@ const createServer = async (
                     listChanged: true,
                 },
             },
-            instructions: SERVER_INSTRUCTIONS,
+            instructions: buildServerInstructions(ctx.editSummary.attribution),
             cacheHints: {
                 'tools/list': CACHE_HINT,
                 'resources/list': CACHE_HINT,

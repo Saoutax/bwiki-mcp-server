@@ -1,3 +1,4 @@
+import type { EditSummarySettings } from '../config/editSummary.ts';
 import type { ActiveWiki } from '../wikis/activeWiki.ts';
 import type { UploadDirs } from '../wikis/uploadDirs.ts';
 import type { WikiRegistry } from '../wikis/wikiRegistry.ts';
@@ -28,6 +29,9 @@ interface BannerDeps {
     readonly wikiRegistry: WikiRegistry;
     readonly activeWiki: ActiveWiki;
     readonly uploadDirs: UploadDirs;
+    // 编辑摘要归属与全局变更标签的配置状态，供运维确认配置已生效。
+    readonly editSummary: EditSummarySettings;
+    readonly editTags: readonly string[];
     // 托管 OAuth 代理对默认站点启用时，横幅报告 oauth-proxy 认证方式。
     readonly proxyEnabled?: boolean;
 }
@@ -43,6 +47,8 @@ const emitStartupBanner = (opts: CreateServerOptions, deps: BannerDeps): void =>
         wikis: Object.keys(wikis),
         allow_wiki_management: deps.wikiRegistry.isManagementAllowed(),
         upload_dirs_configured: deps.uploadDirs.list().length > 0,
+        edit_summary_attribution: deps.editSummary.attribution,
+        edit_tags_configured: deps.editTags.length > 0,
     };
     if (opts.transport === 'http') {
         data.host = opts.http.host;

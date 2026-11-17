@@ -1,5 +1,6 @@
 import type { Mwn } from 'mwn';
 import type { LoginGate } from '../bwiki/loginGate.ts';
+import type { EditSummarySettings } from '../config/editSummary.ts';
 import type { ErrorClassifier } from '../errors/classifyError.ts';
 import type { ResponseFormatter } from '../results/response.ts';
 import type { EditService } from '../services/editService.ts';
@@ -29,6 +30,8 @@ interface ToolContext {
     readonly errors: ErrorClassifier;
     readonly logger: Logger;
     readonly transport: 'http' | 'stdio';
+    /** 编辑摘要生成设置；写工具经 formatEditComment 读取。 */
+    readonly editSummary: EditSummarySettings;
 }
 
 interface ManagementContext extends ToolContext {

@@ -34,12 +34,13 @@ const createToolContext = (deps: {
         wikiProbe: state.wikiProbe,
         loginGate: state.loginGate,
         sections: new SectionServiceImpl(),
-        edit: new EditServiceImpl(state.activeWiki),
+        edit: new EditServiceImpl(state.editTags),
         revision: new RevisionNormalizerImpl(),
         format: new ResponseFormatterImpl(),
         errors: new ErrorClassifierImpl(extensionErrorVocabulary(extensionPacks)),
         logger,
         transport,
+        editSummary: state.editSummary,
     };
 };
 

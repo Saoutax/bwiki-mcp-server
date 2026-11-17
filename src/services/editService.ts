@@ -2,7 +2,6 @@ import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import type { ApiParams, Mwn, ApiUploadResponse } from 'mwn';
 import type { ApiUploadParams } from 'types-mediawiki-api';
-import type { ActiveWiki } from '../wikis/activeWiki.ts';
 
 interface EditService {
     /** Wraps mwn.request with CSRF + tag injection + formatversion=2. For action:edit and similar. */
@@ -32,7 +31,7 @@ interface EditService {
         params: ApiUploadParams,
     ): Promise<ApiUploadResponse>;
 
-    /** Pure helper: returns options with tags injected from the targeted wiki's config. Used by mwn.create/delete/undelete callers. */
+    /** Pure helper: returns options with the configured global tags injected. Used by mwn.create/delete/undelete callers. */
     applyTags<T extends Record<string, unknown>>(options: T): T;
 
     /**
@@ -42,7 +41,8 @@ interface EditService {
 }
 
 class EditServiceImpl implements EditService {
-    public constructor(private readonly activeWiki: ActiveWiki) {}
+    /** 全局变更标签，来自配置的 `editTags`，空数组表示不附加标签。 */
+    public constructor(private readonly tags: readonly string[]) {}
 
     private readonly botRightCache = new WeakMap<Mwn, Promise<boolean>>();
 
@@ -76,10 +76,9 @@ class EditServiceImpl implements EditService {
 
     public async submit(mwn: Mwn, params: Record<string, unknown>): Promise<unknown> {
         const token = await mwn.getCsrfToken();
-        const tags = this.activeWiki.get().config.tags;
         const fullParams: Record<string, unknown> = { ...params, token, formatversion: '2' };
-        if (tags !== null && tags !== undefined) {
-            fullParams.tags = tags;
+        if (this.tags.length > 0) {
+            fullParams.tags = this.tags;
         }
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mwn ApiParams shape; we assemble fullParams to match the typed contract
         return mwn.request(fullParams as ApiParams);
@@ -108,7 +107,6 @@ class EditServiceImpl implements EditService {
         params: ApiUploadParams,
     ): Promise<ApiUploadResponse> {
         const token = await mwn.getCsrfToken();
-        const tags = this.activeWiki.get().config.tags;
         // 直接把 Buffer 交给 mwn 的 multipart `file` 字段：
         // form-data 可直接计算 Buffer 长度，而 Readable 无已知长度会被拒绝。
         const fullParams: Record<string, unknown> = {
@@ -120,8 +118,8 @@ class EditServiceImpl implements EditService {
             token,
             ...params,
         };
-        if (tags !== null && tags !== undefined) {
-            fullParams.tags = tags;
+        if (this.tags.length > 0) {
+            fullParams.tags = this.tags;
         }
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mwn ApiParams shape; the multipart `file` field is mwn's documented upload form
         const response = (await mwn.request(fullParams as ApiParams, {
@@ -131,11 +129,10 @@ class EditServiceImpl implements EditService {
     }
 
     public applyTags<T extends Record<string, unknown>>(options: T): T {
-        const tags = this.activeWiki.get().config.tags;
-        if (tags === null || tags === undefined) {
+        if (this.tags.length === 0) {
             return { ...options };
         }
-        return { ...options, tags };
+        return { ...options, tags: this.tags };
     }
 }
 

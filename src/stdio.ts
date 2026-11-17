@@ -81,6 +81,8 @@ const main = async (): Promise<void> => {
             wikiRegistry: state.wikiRegistry,
             activeWiki: state.activeWiki,
             uploadDirs: state.uploadDirs,
+            editSummary: config.editSummary,
+            editTags: config.editTags,
         },
     );
     const ctx = createToolContext({ logger, state, transport: 'stdio' });

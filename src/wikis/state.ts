@@ -1,4 +1,5 @@
 import { LoginGateImpl, type LoginGate } from '../bwiki/loginGate.ts';
+import type { EditSummarySettings } from '../config/editSummary.ts';
 import type { Config } from '../config/loadConfig.ts';
 import { DEFAULT_SESSION_FILE } from '../config/loadConfig.ts';
 import { getRuntimeToken } from '../runtime/requestContext.ts';
@@ -17,6 +18,8 @@ interface AppState {
     readonly siteInfoCache: SiteInfoCache;
     readonly wikiProbe: WikiProbe;
     readonly loginGate: LoginGate;
+    readonly editSummary: EditSummarySettings;
+    readonly editTags: readonly string[];
 }
 
 const createAppState = (config: Config): AppState => {
@@ -35,6 +38,8 @@ const createAppState = (config: Config): AppState => {
         siteInfoCache,
         wikiProbe,
         loginGate,
+        editSummary: config.editSummary,
+        editTags: config.editTags,
     };
 };
 

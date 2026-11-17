@@ -4,6 +4,12 @@ import * as path from 'path';
 import { errorMessage } from '../errors/isErrnoException.ts';
 import { logger } from '../runtime/logger.ts';
 import { wikiKeyProblem, wikiKeyProblemMessage } from '../runtime/wikiKey.ts';
+import {
+    DEFAULT_EDIT_SUMMARY,
+    resolveEditSummary,
+    type EditSummarySettings,
+} from './editSummary.ts';
+import { resolveEditTags } from './editTags.ts';
 
 /** BWiki 农场的唯一 host，不可配置。 */
 const FARM_HOST = 'wiki.biligame.com';
@@ -30,10 +36,6 @@ interface WikiConfig {
     private?: boolean;
     /** 为 true 时拒绝该站点的写操作 */
     readOnly?: boolean;
-    /** 写在每次编辑上的变更标签 */
-    tags?: string | string[] | null;
-    /** 是否给编辑摘要附加来源后缀，默认 true */
-    attributeEdits?: boolean;
     /** bilibili 会话文件路径，未设则用平台默认 */
     passportSessionFile?: string | null;
 }
@@ -55,11 +57,21 @@ interface Config {
      * 上传工具可读取的绝对路径目录，空表示禁用上传。
      */
     uploadDirs: readonly string[];
+    /**
+     * 编辑摘要生成方式，未配置时保持历史文案。
+     */
+    editSummary: EditSummarySettings;
+    /**
+     * 写入时附加的 MediaWiki 变更标签，全局作用于所有已配置站点。
+     */
+    editTags: readonly string[];
 }
 
 const defaultConfig: Config = {
     defaultWiki: '',
     uploadDirs: [],
+    editSummary: DEFAULT_EDIT_SUMMARY,
+    editTags: [],
     wikis: {},
 };
 
@@ -160,6 +172,8 @@ const resolveConfig = (parsed: unknown): Config => {
     const allowWikiManagement =
         typeof p.allowWikiManagement === 'boolean' ? p.allowWikiManagement : undefined;
     const uploadDirs = resolveUploadDirs(p.uploadDirs);
+    const editSummary = resolveEditSummary(p.editSummary);
+    const editTags = resolveEditTags(p.editTags);
 
     const codes = readWikiCodes(p.wikis);
     const wikis: Record<string, WikiConfig> = {};
@@ -173,7 +187,7 @@ const resolveConfig = (parsed: unknown): Config => {
     // 第一个即默认站点；为空则由启动检查拒绝。
     const defaultWiki = codes[0] ?? '';
     applyOAuth2ClientIdOverride(wikis, defaultWiki);
-    return { defaultWiki, wikis, allowWikiManagement, uploadDirs };
+    return { defaultWiki, wikis, allowWikiManagement, uploadDirs, editSummary, editTags };
 };
 
 /**
@@ -248,5 +262,6 @@ export {
     DEFAULT_SESSION_FILE,
     isCredentialConfigured,
     loadConfigFromFile,
+    resolveConfig,
 };
 export type { WikiConfig, PublicWikiConfig, Config, ExecSecret };
