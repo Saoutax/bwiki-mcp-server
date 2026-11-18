@@ -235,7 +235,7 @@ uploads are disabled on this server (no upload directories configured).
 
 ### 编辑摘要与变更标签
 
-写工具默认给每次写入附加来源说明：有 `comment` 时是 `<你的 comment> (via <工具名> on MediaWiki MCP Server)`，没有时是 `Automated edit (via <工具名> on MediaWiki MCP Server)`。这两段文案和变更标签都可以在配置里调整：
+写工具默认给每次写入附加来源说明：有 `comment` 时是 `<你的 comment> (via <工具名> on BWiki MCP Server)`，没有时是 `Automated edit (via <工具名> on BWiki MCP Server)`。这两段文案和变更标签都可以在配置里调整：
 
 ```json
 {
@@ -249,12 +249,12 @@ uploads are disabled on this server (no upload directories configured).
 }
 ```
 
-| 字段                            | 默认值                                                | 说明                                                                                                                                                 |
-| ------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `editSummary.attribution`       | `true`                                                | 为 `false` 时服务器不生成任何文案，只把调用方 `comment` 原样作为摘要；没有 `comment` 就不发摘要参数。此时 `template` 与 `noCommentTemplate` 被忽略。 |
-| `editSummary.template`          | `{comment} (via {tool} on MediaWiki MCP Server)`      | 有 `comment` 时使用。`{comment}` 替换为调用方给的摘要，`{tool}` 替换为工具名。                                                                       |
-| `editSummary.noCommentTemplate` | `Automated edit (via {tool} on MediaWiki MCP Server)` | 调用方未给 `comment` 时使用；其中的 `{comment}` 渲染为空串。                                                                                         |
-| `editTags`                      | `[]`                                                  | 写入时附加的 MediaWiki 变更标签，全局作用于所有已配置站点；空数组表示不发送 `tags` 参数。                                                            |
+| 字段                            | 默认值                                            | 说明                                                                                                                                                 |
+| ------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `editSummary.attribution`       | `true`                                            | 为 `false` 时服务器不生成任何文案，只把调用方 `comment` 原样作为摘要；没有 `comment` 就不发摘要参数。此时 `template` 与 `noCommentTemplate` 被忽略。 |
+| `editSummary.template`          | `{comment} (via {tool} on BWiki MCP Server)`      | 有 `comment` 时使用。`{comment}` 替换为调用方给的摘要，`{tool}` 替换为工具名。                                                                       |
+| `editSummary.noCommentTemplate` | `Automated edit (via {tool} on BWiki MCP Server)` | 调用方未给 `comment` 时使用；其中的 `{comment}` 渲染为空串。                                                                                         |
+| `editTags`                      | `[]`                                              | 写入时附加的 MediaWiki 变更标签，全局作用于所有已配置站点；空数组表示不发送 `tags` 参数。                                                            |
 
 规则：
 

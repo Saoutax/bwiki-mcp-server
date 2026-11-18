@@ -58,7 +58,7 @@ interface Config {
      */
     uploadDirs: readonly string[];
     /**
-     * 编辑摘要生成方式，未配置时保持历史文案。
+     * 编辑摘要生成方式，未配置时使用内置文案。
      */
     editSummary: EditSummarySettings;
     /**

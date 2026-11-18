@@ -3,7 +3,7 @@
  *
  * 直接导入 src/，无需先构建。
  *
- * 覆盖点：默认文案与历史硬编码逐字一致、attribution 关闭后的直通语义、
+ * 覆盖点：默认文案与内置 BWiki 品牌文案逐字一致、attribution 关闭后的直通语义、
  * 模板占位符替换、非法配置的拒绝、标签规范化。
  */
 
@@ -21,29 +21,29 @@ import { EditServiceImpl } from '../src/services/editService.ts';
 import { formatEditComment } from '../src/wikis/utils.ts';
 
 describe('默认文案', () => {
-    it('默认设置与历史文案逐字一致', () => {
+    it('默认设置与内置文案逐字一致', () => {
         expect(DEFAULT_EDIT_SUMMARY).toEqual({
             attribution: true,
-            template: '{comment} (via {tool} on MediaWiki MCP Server)',
-            noCommentTemplate: 'Automated edit (via {tool} on MediaWiki MCP Server)',
+            template: '{comment} (via {tool} on BWiki MCP Server)',
+            noCommentTemplate: 'Automated edit (via {tool} on BWiki MCP Server)',
         });
     });
 
     it('默认设置有 comment 时的输出', () => {
         expect(renderEditSummary(DEFAULT_EDIT_SUMMARY, 'update-page', 'Fix typo')).toBe(
-            'Fix typo (via update-page on MediaWiki MCP Server)',
+            'Fix typo (via update-page on BWiki MCP Server)',
         );
     });
 
     it('默认设置无 comment 时的输出', () => {
         expect(renderEditSummary(DEFAULT_EDIT_SUMMARY, 'create-page')).toBe(
-            'Automated edit (via create-page on MediaWiki MCP Server)',
+            'Automated edit (via create-page on BWiki MCP Server)',
         );
     });
 
     it('空串 comment 按未提供处理', () => {
         expect(renderEditSummary(DEFAULT_EDIT_SUMMARY, 'delete-page', '')).toBe(
-            'Automated edit (via delete-page on MediaWiki MCP Server)',
+            'Automated edit (via delete-page on BWiki MCP Server)',
         );
     });
 });
@@ -237,7 +237,7 @@ describe('接线检查', () => {
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试替身
         const ctx = { editSummary: DEFAULT_EDIT_SUMMARY } as unknown as ToolContext;
         expect(formatEditComment(ctx, 'update-page', 'Fix typo')).toBe(
-            'Fix typo (via update-page on MediaWiki MCP Server)',
+            'Fix typo (via update-page on BWiki MCP Server)',
         );
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- 测试替身
         const silent = {

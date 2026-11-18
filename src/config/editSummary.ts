@@ -3,7 +3,7 @@ import { logger } from '../runtime/logger.ts';
 /**
  * 编辑摘要生成设置。
  *
- * 默认值与历史硬编码输出逐字一致，未配置时行为不变。
+ * 未配置时使用下面的默认文案，来源后缀带 BWiki MCP Server 品牌。
  */
 interface EditSummarySettings {
     /** 为 false 时不附加服务器生成的文案，只用调用方提供的 comment。 */
@@ -16,8 +16,8 @@ interface EditSummarySettings {
 
 const DEFAULT_EDIT_SUMMARY: EditSummarySettings = {
     attribution: true,
-    template: '{comment} (via {tool} on MediaWiki MCP Server)',
-    noCommentTemplate: 'Automated edit (via {tool} on MediaWiki MCP Server)',
+    template: '{comment} (via {tool} on BWiki MCP Server)',
+    noCommentTemplate: 'Automated edit (via {tool} on BWiki MCP Server)',
 };
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
