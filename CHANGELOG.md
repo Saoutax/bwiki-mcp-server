@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/Saoutax/bwiki-mcp-server/compare/v1.2.1...v1.3.0) (2026-11-18)
+
+
+### Features
+
+* **config:** 默认编辑摘要改为 BWiki MCP Server ([8117b53](https://github.com/Saoutax/bwiki-mcp-server/commit/8117b53a23edd3c559d392b323381205f1184b47))
+
 ## [1.2.1](https://github.com/Saoutax/bwiki-mcp-server/compare/v1.2.0...v1.2.1) (2026-11-18)
 
 
