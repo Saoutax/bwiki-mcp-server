@@ -1,7 +1,7 @@
-import { rm } from 'node:fs/promises';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { DEFAULT_SESSION_FILE, loadConfigFromFile } from '../config/loadConfig.ts';
+import { removeSessionFile } from '../bwiki/sessionFile.ts';
+import { DEFAULT_SESSION_FILE } from '../config/loadConfig.ts';
 import type { ToolContext } from '../runtime/context.ts';
 import type { Tool } from '../runtime/tool.ts';
 
@@ -33,9 +33,9 @@ const bwikiLogout: Tool<typeof inputSchema> = {
     failureVerb: 'log out',
 
     async handle(_args: LogoutArgs, ctx: ToolContext): Promise<CallToolResult> {
-        const config = loadConfigFromFile();
+        // 当前配置的站点都解析到默认会话路径，仍逐个收集以便将来恢复按站点覆盖。
         const files = new Set<string>([DEFAULT_SESSION_FILE]);
-        for (const wiki of Object.values(config.wikis)) {
+        for (const wiki of Object.values(ctx.wikis.getAll())) {
             if (wiki.passportSessionFile) {
                 files.add(wiki.passportSessionFile);
             }
@@ -44,7 +44,7 @@ const bwikiLogout: Tool<typeof inputSchema> = {
         const removed: string[] = [];
         for (const file of files) {
             try {
-                await rm(file, { force: true });
+                await removeSessionFile(file);
                 removed.push(file);
             } catch {
                 // 删除失败的文件不出现在 `removed` 中，而非报错：

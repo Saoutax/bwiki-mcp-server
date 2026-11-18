@@ -18,14 +18,18 @@ interface StoredSession {
  * 读取会话文件，缺失或不可用时返回 null。
  *
  * 文件缺失与格式错误视为同一种情况，
- * 因为下一步动作相同。
+ * 因为下一步动作相同。wiki cookie 与 passport cookie 任一存在即算有凭证。
  */
 const readSessionFile = async (
     file: string = DEFAULT_SESSION_FILE,
 ): Promise<StoredSession | null> => {
     try {
-        const parsed = JSON.parse(await readFile(file, 'utf8')) as StoredSession;
-        return parsed.passportCookie && parsed.userId ? parsed : null;
+        const parsed = JSON.parse(await readFile(file, 'utf8')) as StoredSession | null;
+        if (parsed === null || typeof parsed !== 'object') {
+            return null;
+        }
+        const hasCookie = Boolean(parsed.wikiCookie || parsed.passportCookie);
+        return parsed.userId && hasCookie ? parsed : null;
     } catch {
         return null;
     }

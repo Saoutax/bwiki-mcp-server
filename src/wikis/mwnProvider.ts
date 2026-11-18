@@ -5,6 +5,8 @@ import type { ExecSecret, WikiConfig } from '../config/loadConfig.ts';
 import { DEFAULT_SESSION_FILE } from '../config/loadConfig.ts';
 import { callDeadline, WIKI_CONNECT_TIMEOUT_MS } from '../runtime/callDeadline.ts';
 import { USER_AGENT, refererFor } from '../runtime/constants.ts';
+import { logger } from '../runtime/logger.ts';
+import { getRequestSignal } from '../runtime/requestContext.ts';
 import { withCallBounds } from './abortableMwn.ts';
 import type { ActiveWiki } from './activeWiki.ts';
 import { runExecSecret } from './execSecret.ts';
@@ -143,7 +145,7 @@ class MwnProviderImpl implements MwnProvider {
 
         const instance = new Mwn(options);
         if (passportSession) {
-            injectPassportCookie(instance, passportSession, apiUrl);
+            await injectPassportCookie(instance, passportSession, apiUrl);
         }
         applyReferer(instance, apiUrl);
         try {
@@ -190,19 +192,21 @@ class MwnProviderImpl implements MwnProvider {
      * 读取已存会话，无则返回 null。按文件路径缓存。
      *
      * 返回 null 而非抛出：无会话是待登录状态，由调用方决定是触发登录还是报错。
+     * 只缓存成功读到的会话：null 与异常都不入缓存，否则登录成功后仍会读到旧结论。
      */
     private async resolvePassportSession(config: Readonly<WikiConfig>): Promise<string | null> {
         const file = config.passportSessionFile || DEFAULT_SESSION_FILE;
-        let cached = this.passportSessionCache.get(file);
-        if (!cached) {
-            cached = readPassportSessionFromDisk(file).catch(() => null);
-            // 失败的缓存要清掉，否则瞬时故障会被永久记住。
-            cached.catch(() => {
-                this.passportSessionCache.delete(file);
-            });
-            this.passportSessionCache.set(file, cached);
+        const cached = this.passportSessionCache.get(file);
+        if (cached) {
+            return cached;
         }
-        return cached;
+        const pending = readPassportSessionFromDisk(file).catch(() => null);
+        this.passportSessionCache.set(file, pending);
+        const session = await pending;
+        if (session === null && this.passportSessionCache.get(file) === pending) {
+            this.passportSessionCache.delete(file);
+        }
+        return session;
     }
 
     /** 丢弃已缓存的 passport 会话与 mwn 实例，供登录成功后重新读取。 */
@@ -216,8 +220,15 @@ class MwnProviderImpl implements MwnProvider {
 /**
  * 注入 passport cookie。api.php 直接接受 SESSDATA，无需先换 wiki 会话。
  * 不写 Domain 属性，使 cookie 为 host-only。
+ *
+ * 逐条 await：首请求发出前 cookie 必须已经在 jar 里。单条格式错误只告警，
+ * 不影响其余 cookie（例如缺 bili_jct 仍可读，影响面由首次请求暴露）。
  */
-const injectPassportCookie = (instance: Mwn, cookie: string, apiUrl: string): void => {
+const injectPassportCookie = async (
+    instance: Mwn,
+    cookie: string,
+    apiUrl: string,
+): Promise<void> => {
     for (const pair of cookie
         .split(';')
         .map(c => c.trim())
@@ -228,8 +239,16 @@ const injectPassportCookie = (instance: Mwn, cookie: string, apiUrl: string): vo
         if (!name || !value) {
             continue;
         }
-        // 不 await：失败会在首次用到该 cookie 的请求上暴露。
-        void instance.cookieJar.setCookie(`${name}=${value}; Path=/`, apiUrl);
+        try {
+            await instance.cookieJar.setCookie(`${name}=${value}; Path=/`, apiUrl);
+        } catch (err) {
+            // 只记名字，值属于凭证，不落日志。
+            logger.warning(
+                `mwn: could not set cookie "${name}" for ${apiUrl}: ${
+                    err instanceof Error ? err.message : String(err)
+                }`,
+            );
+        }
     }
 };
 
@@ -255,17 +274,16 @@ const applyReferer = (instance: Mwn, apiUrl: string): void => {
 const pacedMwn = (instance: Mwn, throttle: RequestThrottle): Mwn => {
     const original = instance.request.bind(instance);
     instance.request = async (params, customRequestOptions) =>
+        // 传入调用方的取消信号：冷却/间隔等待可随调用取消而中断。
+        // 发送时刻由 throttle.run 记录，此处不再 noteSent。
         throttle.run(async () => {
             try {
-                const response = await original(params, customRequestOptions);
-                throttle.noteSent();
-                return response;
+                return await original(params, customRequestOptions);
             } catch (error: unknown) {
-                throttle.noteSent();
                 throttle.reportBlock(statusOf(error));
                 throw error;
             }
-        });
+        }, getRequestSignal());
     return instance;
 };
 
@@ -297,5 +315,5 @@ const readPassportSessionFromDisk = async (file: string): Promise<string> => {
     return cookie;
 };
 
-export { MwnProviderImpl };
+export { MwnProviderImpl, injectPassportCookie };
 export type { MwnProvider };

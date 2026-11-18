@@ -1,10 +1,10 @@
-import { writeFile, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { Identity } from '../bwiki/identity.ts';
+import { loginMutex } from '../bwiki/loginGate.ts';
 import { loginViaOfficialPage } from '../bwiki/passportLogin.ts';
-import { DEFAULT_SESSION_FILE, loadConfigFromFile } from '../config/loadConfig.ts';
+import { writeSessionFile } from '../bwiki/sessionFile.ts';
+import { DEFAULT_SESSION_FILE } from '../config/loadConfig.ts';
 import type { ToolContext } from '../runtime/context.ts';
 import type { Tool } from '../runtime/tool.ts';
 
@@ -27,6 +27,11 @@ interface LoginResult {
     message: string;
 }
 
+/** 无人值守环境不弹浏览器，提示改用命令行登录。 */
+const NO_BROWSER_MESSAGE =
+    '当前环境禁止打开浏览器（BWIKI_MCP_NO_BROWSER_LOGIN=1）。' +
+    '请在命令行运行 bwiki-mcp-server login 完成登录，然后重试。';
+
 const bwikiLogin: Tool<typeof inputSchema> = {
     name: 'bwiki-login',
     description:
@@ -44,38 +49,45 @@ const bwikiLogin: Tool<typeof inputSchema> = {
     failureVerb: 'log in',
 
     async handle(_args: LoginArgs, ctx: ToolContext): Promise<CallToolResult> {
-        const config = loadConfigFromFile();
-        const wiki = config.wikis[config.defaultWiki];
+        if (process.env.BWIKI_MCP_NO_BROWSER_LOGIN === '1') {
+            ctx.logger.info('bwiki-login: browser login disabled by BWIKI_MCP_NO_BROWSER_LOGIN');
+            return ctx.format.error('authentication', NO_BROWSER_MESSAGE);
+        }
+
+        // 会话文件属于配置（或平台默认），不在这里重读配置文件。
+        const key = ctx.activeWiki.getDefaultKey();
+        const wiki = ctx.wikis.get(key);
         if (!wiki) {
-            throw new Error(
-                `Config error: the default wiki "${config.defaultWiki}" is not present in config.json`,
+            return ctx.format.invalidInput(
+                `Wiki "${key}" is not present in the configuration, cannot log in.`,
             );
         }
         const apiUrl = `${wiki.server}${wiki.scriptpath}/api.php`;
+        const sessionFile = wiki.passportSessionFile || DEFAULT_SESSION_FILE;
+
+        // 与登录门共用一把锁：同一时刻只开一个登录窗口，避免两个浏览器抢登录。
+        const started = loginMutex.tryRun(async () => loginViaOfficialPage());
+        if (started === null) {
+            return ctx.format.conflict(
+                '登录已在进行中：请先完成已打开的 bilibili 登录页，成功后重试。',
+            );
+        }
 
         // 先确认浏览器存在，避免页面打不开而挂住。
-        const result = await loginViaOfficialPage();
+        const result = await started;
 
         // 先换取 wiki 会话 cookie 再保存，此时才能确认身份。
         const identity = new Identity(apiUrl);
         const established = await identity.establish(result.cookie);
 
-        const sessionFile = wiki.passportSessionFile || DEFAULT_SESSION_FILE;
-        await mkdir(dirname(sessionFile), { recursive: true });
-        await writeFile(
-            sessionFile,
-            JSON.stringify(
-                {
-                    passportCookie: result.cookie,
-                    wikiCookie: established.wikiCookie,
-                    userId: established.name,
-                    savedAt: Date.now(),
-                },
-                null,
-                2,
-            ),
-            'utf8',
-        );
+        await writeSessionFile(sessionFile, {
+            passportCookie: result.cookie,
+            wikiCookie: established.wikiCookie,
+            userId: established.name,
+            savedAt: Date.now(),
+        });
+        // 通知登录门：会话已就绪，后续调用无需再走登录门。
+        ctx.loginGate.markAuthenticated(established.name);
         ctx.logger.info(
             `bwiki-login: logged in as ${established.name}, session written to ${sessionFile}`,
         );

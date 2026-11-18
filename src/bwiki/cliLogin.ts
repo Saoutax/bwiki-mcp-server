@@ -5,29 +5,19 @@
  * 绑定，凭证有效即可用；时效性由 MCP 启动时的 sessionGate 校验。
  */
 
-import { writeFile, mkdir } from 'node:fs/promises';
-import { dirname } from 'node:path';
 import { DEFAULT_SESSION_FILE } from '../config/loadConfig.ts';
 import { loginViaOfficialPage } from './passportLogin.ts';
+import { removeSessionFile, writeSessionFile } from './sessionFile.ts';
 
-/** 写入会话文件。 */
+/** 写入会话文件（原子、0600）。 */
 const writeSession = async (cookie: string, userId: string, file: string): Promise<void> => {
-    await mkdir(dirname(file), { recursive: true });
-    await writeFile(
-        file,
-        JSON.stringify(
-            {
-                passportCookie: cookie,
-                // 留空：api.php 直接接受 passport cookie，无需先换 wiki 会话。
-                wikiCookie: '',
-                userId,
-                savedAt: Date.now(),
-            },
-            null,
-            2,
-        ),
-        'utf8',
-    );
+    await writeSessionFile(file, {
+        passportCookie: cookie,
+        // 留空：api.php 直接接受 passport cookie，无需先换 wiki 会话。
+        wikiCookie: '',
+        userId,
+        savedAt: Date.now(),
+    });
 };
 
 const runLogin = async (argv: readonly string[]): Promise<number> => {
@@ -62,9 +52,8 @@ const runLogin = async (argv: readonly string[]): Promise<number> => {
 
 const runLogout = async (argv: readonly string[]): Promise<number> => {
     const file = argv[0] || DEFAULT_SESSION_FILE;
-    const { rm } = await import('node:fs/promises');
     try {
-        await rm(file, { force: true });
+        await removeSessionFile(file);
     } catch (err) {
         console.error(`删除会话文件失败：${err instanceof Error ? err.message : String(err)}`);
         return 1;
