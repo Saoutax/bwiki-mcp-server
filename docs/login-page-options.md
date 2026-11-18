@@ -25,7 +25,7 @@ bwiki-login
 
 ## 浏览器依赖
 
-使用 `puppeteer-core`，不下载浏览器。按 Edge → Chrome → Chromium 顺序探测本机安装。
+使用 `puppeteer-core`，不下载浏览器。探测顺序：`BWIKI_MCP_BROWSER_PATH` 指定的可执行文件 → Edge → Chrome → Chromium；Windows 的常见安装路径、macOS 的 `/Applications/...`、Linux 的 `google-chrome`/`chromium` 都会尝试。
 
 ## wiki 对 cookie 的接受度
 

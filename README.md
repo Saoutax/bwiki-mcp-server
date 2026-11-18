@@ -7,8 +7,8 @@
 ## 特性
 
 - **bilibili 通行证认证。** 通过官方 bilibili 登录页登录，由本机真实浏览器驱动。扫码、密码、短信、微信/微博/QQ 等全部登录方式都可用，因为这些都不是本项目自己实现的。
-- **不降级为匿名。** 没有会话，或已有会话不再被识别时，服务器拒绝服务并断开连接，绝不悄悄退回匿名访问。
-- **写操作前校验身份。** BWiki 对失效的 cookie 不会拒绝，而是把请求当作匿名访客处理，于是过期凭证仍能让写操作成功，只是页面署名变成调用方的出口 IP。因此每次写操作前都先校验身份，校验失败即终止会话。
+- **不降级为匿名。** 所有 wiki 工具调用前都会校验会话；没有会话或会话已失效时返回 `authentication` 错误并启动登录页，登录完成后重发请求即可，绝不悄悄退回匿名访问。
+- **每次调用前校验身份。** BWiki 对失效的 cookie 不会拒绝，而是把请求当作匿名访客处理，于是过期凭证仍能让写入成功，只是页面署名变成调用方的出口 IP。因此每次 wiki 工具调用（读和写）前都先校验身份；校验失败即返回认证错误并触发重新登录，不会以 IP 身份写入。
 - **感知 wiki 农场。** 一份凭证覆盖农场内所有 WIKI；`list-wikis` 从农场名册枚举站点，而不只是读本地配置。
 - **克制地发请求。** 所有请求串行化，间隔超过一秒；遭遇 EdgeOne 拦截（HTTP 567/514）时自动冷却，而不是反复重试。
 - **仅限 HTTPS。** 非 HTTPS 的外部请求一律拒绝，会话 cookie 以 host-only 方式注入。
@@ -36,7 +36,7 @@
 | `list-wikis`            | 列出农场内的 WIKI——代号、站点名、地址、是否只读或默认，以及是否已在本地配置。支持 `limit`、`query`、`configuredOnly`。 |
 | `parse-wikitext`        | 把 wikitext 渲染成 HTML，不保存。                                                                                      |
 | `search-page`           | 对页面标题与正文做全文搜索。                                                                                           |
-| `search-page-by-prefix` | 按标题前缀搜索页面。                                                                                                   |
+| `search-page-by-prefix` | 按标题前缀搜索页面；支持 `模板:`、`分类:` 等命名空间前缀，省略时默认主命名空间。                                       |
 | `whoami`                | 报告当前会话认证的身份——用户名、是否匿名、所属用户组。                                                                 |
 
 ### 页面写操作
@@ -78,7 +78,7 @@
 
 - Node.js 22.12 或更高版本。
 - pnpm 11 或更高版本（`package.json` 的 `packageManager` 固定为 pnpm 12.6.0；启用 Corepack 时会自动使用该版本）。
-- 已安装 Microsoft Edge 或 Google Chrome。登录流程通过 `puppeteer-core` 驱动其中之一，不会额外下载浏览器。
+- 已安装 Microsoft Edge、Google Chrome 或 Chromium。登录流程通过 `puppeteer-core` 驱动本机浏览器，不会额外下载浏览器；Windows/macOS/Linux 均可，也可用 `BWIKI_MCP_BROWSER_PATH` 指定可执行文件。
 - 一个 bilibili 账号，且具备你要调用的工具所需的用户权限。
 
 ## 安装
@@ -227,7 +227,9 @@ uploads are disabled on this server (no upload directories configured).
 | 须在允许目录或其子目录下 | 调用方给出的文件路径经 `realpath` 解析后按前缀匹配 |
 | 符号链接按其真实位置判定 | 允许目录内的链接若指向外部，该文件仍会被拒绝       |
 
-也可以用环境变量 `MCP_UPLOAD_DIRS`，以 `:` 分隔，与配置项合并生效。
+也可以用环境变量 `MCP_UPLOAD_DIRS`，以 `path.delimiter` 分隔（Windows 为 `;`，其他平台为 `:`），与配置项合并生效。
+
+`upload-file` 在目标文件已存在时会失败（可用 `update-file` 覆盖为新版本）；`upload-file-from-url` 同理。
 
 `upload-file-from-url` 与 `update-file-from-url` 读取的是远程 URL，不受此限制。
 
@@ -283,15 +285,15 @@ uploads are disabled on this server (no upload directories configured).
 
 ### 会话失效时会怎样
 
-服务启动前，启动检查会先验证已保存的会话。验证不通过时，服务器会带原因退出，而不是建立连接。
+服务启动时会校验已保存的会话。校验失败不会阻止启动，只把状态记为未登录；首次 wiki 工具调用会触发登录流程并返回 `authentication` 错误。
 
 运行期间，BWiki 不会拒绝失效的 cookie，而是把请求当作匿名访客处理，并用调用方的出口 IP 顶替用户名。成功响应里没有任何字段会告诉你身份已经变了。因此：
 
-- **写操作**前会先校验身份。若 wiki 不再报告 bilibili UID，写操作被拒绝，响应说明原因，随后连接关闭。服务器绝不会以 IP 身份写入。
-- **读操作**不做校验。匿名读返回的本来就是同一份公开内容，多花一次请求买不到任何东西。
+- **每次 wiki 工具调用前都会校验身份**（读操作也一样）。若 wiki 不再报告 bilibili UID，调用返回 `authentication` 错误，同时启动登录页；完成登录后重发本次请求即可，当前 MCP 连接保持可用。
 - **传输失败不算登出。** wiki 不可达说明不了凭证状态，因此报为上游错误、连接保持。一次网络抖动不该让你重新扫码。
+- 一旦判定会话失效，这个结论会保持：后续调用直接进入重新登录流程，不再重复探测。
 
-一旦判定会话失效，这个结论会保持：后续写操作直接拒绝，不再重复探测。
+`bwiki-login` 工具与命令行 `login` 保存的会话都会在运行期被重新读取；登录成功后无需重启服务。
 
 ## 环境变量
 
@@ -302,9 +304,10 @@ uploads are disabled on this server (no upload directories configured).
 | `MCP_CONTENT_MAX_BYTES`   | 工具返回内容正文的字节上限，按每个响应计一次。可按所用客户端的响应预算调整。                                   | `75000`        |
 | `MCP_FILE_DATA_MAX_BYTES` | `get-file-data` 响应中 base64 数据的硬上限。超限的调用直接报错，不截断。                                       | `1000000`      |
 | `MCP_UPLOAD_MAX_BYTES`    | `*-from-url` 上传工具在服务端抓取时的内存上限。超出该大小的文件会转交 wiki 自身的复制上传，不在本服务器缓存。  | `104857600`    |
-| `MCP_UPLOAD_DIRS`         | 上传工具允许读取的绝对路径目录，以 `:` 分隔。与 `uploadDirs` 合并生效。                                        | 未设置         |
+| `MCP_UPLOAD_DIRS`         | 上传工具允许读取的绝对路径目录，以 `path.delimiter` 分隔（Windows 为 `;`）。与 `uploadDirs` 合并生效。         | 未设置         |
 | `MCP_USER_AGENT`          | 替换所有外部请求的 `User-Agent` 头。不设置时使用内置的 Chrome 桌面版 UA。                                      | 内置 Chrome UA |
 | `MCP_TRUSTED_HOSTS`       | 有外发 SSRF 防护：解析到私有或回环地址的目标一律拒绝，此变量列出的主机可豁免。                                 | 未设置         |
+| `BWIKI_MCP_BROWSER_PATH`  | 指定登录用的浏览器可执行文件路径，优先于自动探测。                                                             | 自动探测       |
 
 ## 安全
 
@@ -312,7 +315,7 @@ uploads are disabled on this server (no upload directories configured).
 - **cookie 是 host-only 的。** 不写入 `Domain` 属性。一旦写入，它会被当作域级 cookie，向任何以 `wiki.biligame.com` 结尾的主机发送。
 - **仅限 HTTPS。** 任何请求（包括 SSRF 重定向后的请求）都必须使用 HTTPS。
 - **User-Agent 默认采用 Chrome 桌面版。** BWiki 位于腾讯云 EdgeOne 之后，会按 UA 的自动化特征评分，自称 `bwiki-mcp-server/...` 这类字符串更容易被判定为机器人。需要用于统计或联系的目的时，可用 `MCP_USER_AGENT` 覆盖，但我们不建议改成带 bot 字样的形式。
-- **限速是有意为之。** 请求串行发出，间隔超过一秒。收到 HTTP 567 或 514 表示已被 EdgeOne 拦截；服务器会暂停三分钟而不是重试，此时你也应当停止调用，而不是想办法绕过。
+- **限速是有意为之。** 请求串行发出，间隔超过一秒。收到 HTTP 567 或 514 表示已被 EdgeOne 拦截；服务器会暂停三分钟而不是重试（等待可被调用取消/超时中止），此时你也应当停止调用，而不是想办法绕过。
 - **写操作即你的行为。** 服务器以保存的 bilibili 账号身份行事。每条工具调用日志都会标明该账号（形如 `bilibili:<你的 UID>`），使每次写入都可追溯。
 
 ## 开发
