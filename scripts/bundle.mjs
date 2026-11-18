@@ -24,7 +24,7 @@ const result = await build({
     entryPoints: ['src/stdio.ts'],
     bundle: true,
     platform: 'node',
-    target: 'node20',
+    target: 'node22',
     format: 'cjs',
     outfile: 'dist/bundle.cjs',
     // 全部内联：发布的单文件要能脱离 node_modules 直接运行。
