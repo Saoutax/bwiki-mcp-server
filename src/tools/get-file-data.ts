@@ -1,14 +1,17 @@
 import type { CallToolResult, ImageContent, TextContent } from '@modelcontextprotocol/server';
 import type { ApiPage, ImageInfo } from 'mwn';
 import { z } from 'zod';
+import { fetchGuardedBytes, FileTooLargeError } from '../httpFetch.ts';
 import type { ToolContext } from '../runtime/context.ts';
+import { getRequestSignal } from '../runtime/requestContext.ts';
 import type { Tool } from '../runtime/tool.ts';
+import { resolveSiteInfo } from '../wikis/siteInfo.ts';
+import { toNamespaceTitle } from '../wikis/titlePrefix.ts';
 
 const DEFAULT_IMAGE_WIDTH = 1024;
 const DEFAULT_TEXT_WIDTH = 512;
 const MAX_WIDTH = 1568;
 const DEFAULT_FILE_DATA_MAX_BYTES = 1_000_000;
-const MAX_REDIRECTS = 5;
 
 // base64 载荷的硬上限。与 MCP_CONTENT_MAX_BYTES 不同，二进制无法截断，超限直接报错。
 const resolveFileDataMaxBytes = (): number => {
@@ -57,8 +60,13 @@ const getFileData: Tool<typeof inputSchema> = {
     target: a => a.title,
 
     async handle({ title, width, format }, ctx: ToolContext): Promise<CallToolResult> {
+        const siteInfo = await resolveSiteInfo(ctx, ctx.activeWiki.get().key);
+        const resolvedTitle = toNamespaceTitle(title, 6, siteInfo);
+        if ('error' in resolvedTitle) {
+            return ctx.format.invalidInput(resolvedTitle.error);
+        }
+
         const mwn = await ctx.mwn();
-        const fileTitle = title.startsWith('File:') ? title : `File:${title}`;
         const effectiveWidth = Math.min(
             width ?? (format === 'text' ? DEFAULT_TEXT_WIDTH : DEFAULT_IMAGE_WIDTH),
             MAX_WIDTH,
@@ -66,7 +74,7 @@ const getFileData: Tool<typeof inputSchema> = {
 
         const response = await mwn.request({
             action: 'query',
-            titles: fileTitle,
+            titles: resolvedTitle.pageTitle,
             prop: 'imageinfo',
             iiprop: 'url|size|mime',
             iiurlwidth: effectiveWidth,
@@ -75,6 +83,10 @@ const getFileData: Tool<typeof inputSchema> = {
 
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mwn API response shape; trusted at this boundary
         const page = response.query?.pages?.[0] as ApiPage | undefined;
+        // invalid 必须早于 missing 判断：MediaWiki 对非法标题同时置两个标记。
+        if (page?.invalid === true) {
+            return ctx.format.invalidInput(`"${title}" is not a valid page title`);
+        }
         if (!page || page.missing) {
             return ctx.format.notFound(`File "${title}" not found`);
         }
@@ -103,11 +115,10 @@ const getFileData: Tool<typeof inputSchema> = {
             );
         }
 
-        // 经 mwn 下载，与读取元数据使用同一客户端。URL 来自已配置站点的 imageinfo，
-        // 故不做 SSRF 校验。
-        // URL 来自已配置站点，v1 直接接受；按主机收窄的校验列为后续加固。
+        // 经 fetchGuardedBytes 下载：逐跳校验 https 与公开地址（取自站点 imageinfo 的
+        // URL 同样要过 SSRF 关），并受超时与字节上限约束。
         //
-        // rawRequest 不经 mwn 的认证注入，故手动加 bearer，
+        // 该通道不经 mwn 的认证注入，故手动加 bearer，
         // 且仅在同源时添加，避免泄露到其他主机。
         const fetchHeaders: Record<string, string> = {};
         if (
@@ -123,36 +134,42 @@ const getFileData: Tool<typeof inputSchema> = {
                 // URL 无法解析，跳过 bearer 注入。
             }
         }
-        const axiosResponse = await mwn.rawRequest({
-            url: fetchUrl,
-            method: 'GET',
-            responseType: 'arraybuffer',
-            maxRedirects: MAX_REDIRECTS,
-            headers: fetchHeaders,
-        });
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- axios arraybuffer body at this boundary
-        const buffer = Buffer.from(axiosResponse.data as ArrayBuffer);
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- axios response headers at this boundary
-        const headers = (axiosResponse.headers ?? {}) as Record<string, unknown>;
-        const rawContentType = headers['content-type'];
-        const responseMime =
-            typeof rawContentType === 'string' ? rawContentType.split(';')[0]?.trim() : undefined;
+
+        const maxBytes = resolveFileDataMaxBytes();
+        // base64 编码后的长度为原始字节的 4/3，故原始字节上限按编码上限换算；
+        // 超限在读取阶段即中止，不会先把整份文件读进内存。
+        const rawMaxBytes = Math.max(1, Math.floor((maxBytes * 3) / 4));
+        let fetched: { bytes: Buffer; contentType?: string };
+        try {
+            fetched = await fetchGuardedBytes(fetchUrl, {
+                maxBytes: rawMaxBytes,
+                headers: fetchHeaders,
+                signal: getRequestSignal(),
+                limitName: 'MCP_FILE_DATA_MAX_BYTES',
+            });
+        } catch (error) {
+            if (error instanceof FileTooLargeError) {
+                return ctx.format.invalidInput(
+                    `File data is over the ${maxBytes}-byte encoded limit (MCP_FILE_DATA_MAX_BYTES). Request a smaller width.`,
+                );
+            }
+            throw error;
+        }
 
         // 确认取得的字节确实是图片后再输出 image 块。
         const mimeType =
-            responseMime !== undefined && responseMime.startsWith('image/')
-                ? responseMime
+            fetched.contentType !== undefined && fetched.contentType.startsWith('image/')
+                ? fetched.contentType
                 : isImageMime
                   ? info.mime
                   : undefined;
         if (mimeType === undefined) {
             return ctx.format.invalidInput(
-                `Fetched data for "${title}" is not an image (${responseMime ?? info.mime ?? 'unknown type'}). Use get-file for its download URL.`,
+                `Fetched data for "${title}" is not an image (${fetched.contentType ?? info.mime ?? 'unknown type'}). Use get-file for its download URL.`,
             );
         }
 
-        const base64 = buffer.toString('base64');
-        const maxBytes = resolveFileDataMaxBytes();
+        const base64 = fetched.bytes.toString('base64');
         if (base64.length > maxBytes) {
             return ctx.format.invalidInput(
                 `Encoded file data is ${base64.length} bytes, over the ${maxBytes}-byte limit (MCP_FILE_DATA_MAX_BYTES). Request a smaller width.`,

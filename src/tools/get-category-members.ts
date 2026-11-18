@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { TruncationInfo } from '../results/truncation.ts';
 import type { ToolContext } from '../runtime/context.ts';
 import type { Tool } from '../runtime/tool.ts';
+import { resolveSiteInfo } from '../wikis/siteInfo.ts';
+import { toNamespaceTitle } from '../wikis/titlePrefix.ts';
 
 enum CategoryMemberType {
     file = 'file',
@@ -17,11 +19,12 @@ interface CategoryMember {
     type?: 'page' | 'file' | 'subcat';
 }
 
-const normalizeCategoryTitle = (input: string): string =>
-    /^category:/i.test(input) ? input : `Category:${input}`;
-
 const inputSchema = {
-    category: z.string().describe('Category name (with or without the "Category:" prefix)'),
+    category: z
+        .string()
+        .describe(
+            'Category name (with or without its namespace prefix; localized prefixes are accepted)',
+        ),
     types: z
         .array(z.nativeEnum(CategoryMemberType))
         .optional()
@@ -46,7 +49,7 @@ const inputSchema = {
 const getCategoryMembers: Tool<typeof inputSchema> = {
     name: 'get-category-members',
     description:
-        "Lists members of a category, returning each member's page ID, namespace ID, and wiki page title. Optionally filter by member type (page, file, subcat) or by namespace ID — filters apply server-side before the cap. Returns up to 500 members per call; paginate with continueFrom (opaque cursor echoed from the previous response). A member's type is omitted when it is an ordinary page (present only for files and subcategories).",
+        "Lists members of a category, returning each member's page ID, namespace ID, and wiki page title. Optionally filter by member type (page, file, subcat) or by namespace ID — filters apply server-side before the cap. The category name may be given with or without its namespace prefix; the wiki's localized Category prefix is accepted and normalized. Returns up to 500 members per call; paginate with continueFrom (opaque cursor echoed from the previous response). A member's type is omitted when it is an ordinary page (present only for files and subcategories).",
     inputSchema,
     annotations: {
         title: 'Get category members',
@@ -62,12 +65,18 @@ const getCategoryMembers: Tool<typeof inputSchema> = {
         { category, types, namespaces, limit, continueFrom },
         ctx: ToolContext,
     ): Promise<CallToolResult> {
+        const siteInfo = await resolveSiteInfo(ctx, ctx.activeWiki.get().key);
+        const resolvedTitle = toNamespaceTitle(category, 14, siteInfo);
+        if ('error' in resolvedTitle) {
+            return ctx.format.invalidInput(resolvedTitle.error);
+        }
+
         const mwn = await ctx.mwn();
 
         const params: Record<string, string | number | boolean> = {
             action: 'query',
             list: 'categorymembers',
-            cmtitle: normalizeCategoryTitle(category),
+            cmtitle: resolvedTitle.pageTitle,
             cmprop: 'ids|title|type',
             formatversion: '2',
         };

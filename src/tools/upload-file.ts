@@ -5,6 +5,8 @@ import { z } from 'zod';
 import type { ToolContext } from '../runtime/context.ts';
 import type { Tool } from '../runtime/tool.ts';
 import { assertAllowedPath, UploadValidationError } from '../uploadGuard.ts';
+import { resolveSiteInfo } from '../wikis/siteInfo.ts';
+import { toNamespaceTitle } from '../wikis/titlePrefix.ts';
 import { formatEditComment, buildPageUrl } from '../wikis/utils.ts';
 
 const inputSchema = {
@@ -30,6 +32,12 @@ const uploadFile: Tool<typeof inputSchema> = {
     target: a => a.title,
 
     async handle({ filepath, title, text, comment }, ctx: ToolContext): Promise<CallToolResult> {
+        const siteInfo = await resolveSiteInfo(ctx, ctx.activeWiki.get().key);
+        const resolvedTitle = toNamespaceTitle(title, 6, siteInfo);
+        if ('error' in resolvedTitle) {
+            return ctx.format.invalidInput(resolvedTitle.error);
+        }
+
         let resolvedPath: string;
         try {
             resolvedPath = await assertAllowedPath(filepath, ctx.uploadDirs.list());
@@ -44,20 +52,29 @@ const uploadFile: Tool<typeof inputSchema> = {
         const params: ApiUploadParams = {
             comment: formatEditComment(ctx, 'upload-file', comment),
         };
-        const data: ApiUploadResponse = await ctx.edit.submitUpload(
-            mwn,
-            resolvedPath,
-            title,
-            text,
-            params,
-        );
+        // 不发送 ignorewarnings：同名冲突必须报错，而非静默覆盖。
+        let data: ApiUploadResponse;
+        try {
+            data = await ctx.edit.submitUpload(
+                mwn,
+                resolvedPath,
+                resolvedTitle.bareName,
+                text,
+                params,
+            );
+        } catch (error) {
+            if (error instanceof UploadValidationError) {
+                return ctx.format.invalidInput(`Failed to upload file: ${error.message}`);
+            }
+            throw error;
+        }
 
         const imageinfo = (
             data as ApiUploadResponse & {
                 imageinfo?: { descriptionurl?: string; url?: string };
             }
         ).imageinfo;
-        const filename = data.filename ?? title.replace(/^File:/, '');
+        const filename = data.filename ?? resolvedTitle.bareName;
         return ctx.format.ok({
             filename,
             pageUrl: imageinfo?.descriptionurl ?? (await buildPageUrl(ctx, `File:${filename}`)),

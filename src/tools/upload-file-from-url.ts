@@ -5,7 +5,11 @@ import { z } from 'zod';
 import { errorMessage } from '../errors/isErrnoException.ts';
 import { fetchFileBytes, shouldRescueToWiki } from '../httpFetch.ts';
 import type { ToolContext } from '../runtime/context.ts';
+import { getRequestSignal } from '../runtime/requestContext.ts';
 import type { Tool } from '../runtime/tool.ts';
+import { assertUploadResult } from '../services/editService.ts';
+import { resolveSiteInfo } from '../wikis/siteInfo.ts';
+import { toNamespaceTitle } from '../wikis/titlePrefix.ts';
 import { formatEditComment, buildPageUrl } from '../wikis/utils.ts';
 
 const inputSchema = {
@@ -31,17 +35,25 @@ const uploadFileFromUrl: Tool<typeof inputSchema> = {
     target: a => a.title,
 
     async handle({ url, title, text, comment }, ctx: ToolContext): Promise<CallToolResult> {
+        const siteInfo = await resolveSiteInfo(ctx, ctx.activeWiki.get().key);
+        const resolvedTitle = toNamespaceTitle(title, 6, siteInfo);
+        if ('error' in resolvedTitle) {
+            return ctx.format.invalidInput(resolvedTitle.error);
+        }
+        const bareName = resolvedTitle.bareName;
+
         const mwn = await ctx.mwn();
         const baseParams: ApiUploadParams = {
             comment: formatEditComment(ctx, 'upload-file-from-url', comment),
         };
 
         // 优先在服务端抓取后以 multipart 上传，wiki 无需开启 copy-upload。
+        // 不发送 ignorewarnings：同名冲突必须报错，而非静默覆盖。
         let bytes: Buffer | undefined;
         try {
-            bytes = await fetchFileBytes(url);
+            bytes = await fetchFileBytes(url, { signal: getRequestSignal() });
         } catch (error) {
-            if (!shouldRescueToWiki(error)) {
+            if (!shouldRescueToWiki(error, getRequestSignal())) {
                 throw error;
             }
             // 不可达或超限时回退到 wiki 侧 copy-upload。
@@ -49,19 +61,23 @@ const uploadFileFromUrl: Tool<typeof inputSchema> = {
 
         let data: ApiUploadResponse;
         if (bytes !== undefined) {
-            const partName = title.replace(/^File:/, '');
             data = await ctx.edit.submitUploadFromBytes(
                 mwn,
                 bytes,
-                partName,
-                title,
+                bareName,
+                bareName,
                 text,
                 baseParams,
             );
         } else {
-            const params = ctx.edit.applyTags<ApiUploadParams>(baseParams);
+            // mwn.uploadFromUrl 在展开 options 之前硬编码 ignorewarnings: true，
+            // 必须显式传 false 才能让同名冲突成为错误而非静默覆盖。
+            const params = ctx.edit.applyTags<ApiUploadParams>({
+                ...baseParams,
+                ignorewarnings: false,
+            });
             try {
-                data = await mwn.uploadFromUrl(url, title, text, params);
+                data = await mwn.uploadFromUrl(url, bareName, text, params);
             } catch (error) {
                 const errorText = errorMessage(error);
                 if (errorText.includes('copyuploaddisabled')) {
@@ -73,6 +89,8 @@ const uploadFileFromUrl: Tool<typeof inputSchema> = {
                 }
                 throw error;
             }
+            // mwn 把 warnings 只写入日志，不当作失败；这里统一按 Success 判定。
+            assertUploadResult(data);
         }
 
         const imageinfo = (
@@ -80,7 +98,7 @@ const uploadFileFromUrl: Tool<typeof inputSchema> = {
                 imageinfo?: { descriptionurl?: string; url?: string };
             }
         ).imageinfo;
-        const filename = data.filename ?? title.replace(/^File:/, '');
+        const filename = data.filename ?? bareName;
         return ctx.format.ok({
             filename,
             pageUrl: imageinfo?.descriptionurl ?? (await buildPageUrl(ctx, `File:${filename}`)),

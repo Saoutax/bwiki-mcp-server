@@ -246,44 +246,80 @@ const fetchPageHtml = async (
 };
 
 /**
+ * 经 SSRF 校验抓取 URL 字节，受大小、超时与调用方取消限制。
+ * 不向源站发送 wiki 凭证；返回的 content-type 已去掉参数部分。
+ */
+const fetchGuardedBytes = async (
+    url: string,
+    options?: {
+        maxBytes?: number;
+        timeoutMs?: number;
+        headers?: Record<string, string>;
+        signal?: AbortSignal;
+        /** 超限错误里指向的设置名，便于调用方把错误翻译成用户可见的提示。 */
+        limitName?: string;
+    },
+): Promise<{ bytes: Buffer; contentType?: string }> => {
+    const maxBytes = options?.maxBytes ?? resolveUploadMaxBytes();
+    const timeoutMs = options?.timeoutMs ?? FETCH_TIMEOUT_MS;
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    // 调用方取消与内部超时任一触发即中止；AbortSignal.any 在 Node 22 可用。
+    const signal =
+        options?.signal === undefined
+            ? timeoutSignal
+            : AbortSignal.any([options.signal, timeoutSignal]);
+
+    const response = await fetchCore(url, { headers: options?.headers, signal });
+    const bytes = await readCapped(response, maxBytes, options?.limitName);
+    const contentType = readContentType(response);
+    return { bytes, ...(contentType === undefined ? {} : { contentType }) };
+};
+
+/** 响应头里的 MIME 类型，去掉 charset 等参数。 */
+const readContentType = (response: Response): string | undefined => {
+    const raw = response.headers.get('content-type');
+    if (raw === null) {
+        return undefined;
+    }
+    const value = raw.split(';')[0]?.trim();
+    return value === undefined || value === '' ? undefined : value;
+};
+
+/**
  * 经 SSRF 校验抓取 URL 字节，受大小与超时限制，不向源站发送 wiki 凭证。
  * 异常类型见 shouldRescueToWiki() 的判断。
  */
 const fetchFileBytes = async (
     url: string,
-    options?: { maxBytes?: number; timeoutMs?: number },
+    options?: { maxBytes?: number; timeoutMs?: number; signal?: AbortSignal },
 ): Promise<Buffer> => {
-    const maxBytes = options?.maxBytes ?? resolveUploadMaxBytes();
-    const timeoutMs = options?.timeoutMs ?? FETCH_TIMEOUT_MS;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-        return await readCapped(
-            await fetchCore(url, { signal: controller.signal }),
-            maxBytes,
-            'MCP_UPLOAD_MAX_BYTES',
-        );
-    } finally {
-        clearTimeout(timer);
-    }
+    const { bytes } = await fetchGuardedBytes(url, {
+        maxBytes: options?.maxBytes,
+        timeoutMs: options?.timeoutMs,
+        signal: options?.signal,
+        limitName: 'MCP_UPLOAD_MAX_BYTES',
+    });
+    return bytes;
 };
 
 /**
  * 服务端抓取失败时是否转交 wiki 侧 copy-upload。
- * 源站不可达或超限时转交；源站已拒绝请求时不转交。
+ * 源站不可达或超限时转交；源站已拒绝请求、SSRF 策略拒绝或调用方已取消时不转交。
  */
-const shouldRescueToWiki = (error: unknown): boolean => {
+const shouldRescueToWiki = (error: unknown, signal?: AbortSignal): boolean => {
+    // SSRF 拒绝是最终结论：转交 wiki 侧等于绕过本机的地址策略。
+    // 调用方取消同理，不应再发起新的上游请求。
+    if (error instanceof SsrfValidationError || signal?.aborted === true) {
+        return false;
+    }
     if (error instanceof HttpStatusError) {
         return false;
     }
-    if (
-        error instanceof FileTooLargeError ||
-        error instanceof SsrfValidationError ||
-        error instanceof FetchError
-    ) {
+    if (error instanceof FileTooLargeError || error instanceof FetchError) {
         return true;
     }
     if (isErrnoException(error)) {
+        // 内部超时导致的 AbortError 属"不可达"，转交 wiki 侧。
         if (error.name === 'AbortError') {
             return true;
         }
@@ -302,6 +338,7 @@ export {
     makeApiRequest,
     postForm,
     fetchPageHtml,
+    fetchGuardedBytes,
     fetchFileBytes,
     shouldRescueToWiki,
 };

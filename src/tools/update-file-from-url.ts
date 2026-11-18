@@ -3,11 +3,21 @@ import type { ApiUploadResponse } from 'mwn';
 import type { ApiUploadParams } from 'types-mediawiki-api';
 import { z } from 'zod';
 import { errorMessage } from '../errors/isErrnoException.ts';
-import { assertFileExists, FileNotFoundError } from '../fileExistence.ts';
+import { assertFileExists, FileNotFoundError, InvalidFileTitleError } from '../fileExistence.ts';
 import { fetchFileBytes, shouldRescueToWiki } from '../httpFetch.ts';
 import type { ToolContext } from '../runtime/context.ts';
+import { getRequestSignal } from '../runtime/requestContext.ts';
 import type { Tool } from '../runtime/tool.ts';
+import { assertUploadResult } from '../services/editService.ts';
+import { resolveSiteInfo } from '../wikis/siteInfo.ts';
+import { toNamespaceTitle } from '../wikis/titlePrefix.ts';
 import { formatEditComment, buildPageUrl } from '../wikis/utils.ts';
+
+/**
+ * mwn.uploadFromUrl 把 text 定为 string，但参数为 undefined 时其 preprocessParams
+ * 会删除该字段；传 '' 则会写入空的文件页文本。故显式传 undefined。
+ */
+const OMITTED_TEXT = undefined as unknown as string;
 
 const inputSchema = {
     url: z.string().url().describe('URL of the file to upload'),
@@ -31,10 +41,20 @@ const updateFileFromUrl: Tool<typeof inputSchema> = {
     target: a => a.title,
 
     async handle({ url, title, comment }, ctx: ToolContext): Promise<CallToolResult> {
+        const siteInfo = await resolveSiteInfo(ctx, ctx.activeWiki.get().key);
+        const resolvedTitle = toNamespaceTitle(title, 6, siteInfo);
+        if ('error' in resolvedTitle) {
+            return ctx.format.invalidInput(resolvedTitle.error);
+        }
+        const bareName = resolvedTitle.bareName;
+
         const mwn = await ctx.mwn();
         try {
-            await assertFileExists(mwn, title);
+            await assertFileExists(mwn, title, siteInfo);
         } catch (error) {
+            if (error instanceof InvalidFileTitleError) {
+                return ctx.format.invalidInput(error.message);
+            }
             if (error instanceof FileNotFoundError) {
                 return ctx.format.notFound(
                     `File "${error.title}" does not exist. To create a new file, use upload-file-from-url.`,
@@ -45,6 +65,7 @@ const updateFileFromUrl: Tool<typeof inputSchema> = {
 
         const baseParams: ApiUploadParams = {
             comment: formatEditComment(ctx, 'update-file-from-url', comment),
+            // 覆盖已有文件必须带 ignorewarnings。
             ignorewarnings: true,
         };
 
@@ -52,28 +73,32 @@ const updateFileFromUrl: Tool<typeof inputSchema> = {
         // 仅在无法访问该 URL 时回退到 wiki 侧抓取。
         let bytes: Buffer | undefined;
         try {
-            bytes = await fetchFileBytes(url);
+            bytes = await fetchFileBytes(url, { signal: getRequestSignal() });
         } catch (error) {
-            if (!shouldRescueToWiki(error)) {
+            if (!shouldRescueToWiki(error, getRequestSignal())) {
                 throw error;
             }
         }
 
         let data: ApiUploadResponse;
         if (bytes !== undefined) {
-            const partName = title.replace(/^File:/, '');
             data = await ctx.edit.submitUploadFromBytes(
                 mwn,
                 bytes,
-                partName,
-                title,
-                '',
+                bareName,
+                bareName,
+                undefined,
                 baseParams,
             );
         } else {
-            const params = ctx.edit.applyTags<ApiUploadParams>(baseParams);
+            // mwn.uploadFromUrl 在展开 options 之前硬编码 ignorewarnings: true，
+            // 这里保留它（更新已存在文件需要覆盖警告）并显式声明，避免依赖 mwn 的默认值。
+            const params = ctx.edit.applyTags<ApiUploadParams>({
+                ...baseParams,
+                ignorewarnings: true,
+            });
             try {
-                data = await mwn.uploadFromUrl(url, title, '', params);
+                data = await mwn.uploadFromUrl(url, bareName, OMITTED_TEXT, params);
             } catch (error) {
                 const errorText = errorMessage(error);
                 if (errorText.includes('copyuploaddisabled')) {
@@ -85,6 +110,7 @@ const updateFileFromUrl: Tool<typeof inputSchema> = {
                 }
                 throw error;
             }
+            assertUploadResult(data);
         }
 
         const imageinfo = (
@@ -92,7 +118,7 @@ const updateFileFromUrl: Tool<typeof inputSchema> = {
                 imageinfo?: { descriptionurl?: string; url?: string };
             }
         ).imageinfo;
-        const filename = data.filename ?? title.replace(/^File:/, '');
+        const filename = data.filename ?? bareName;
         return ctx.format.ok({
             filename,
             pageUrl: imageinfo?.descriptionurl ?? (await buildPageUrl(ctx, `File:${filename}`)),

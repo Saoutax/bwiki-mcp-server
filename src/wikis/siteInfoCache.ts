@@ -8,6 +8,8 @@ type LicenseInfo = { url: string; title: string };
 type SiteInfo = {
     server: string;
     articlepath: string;
+    /** 站点名（$wgSitename）；siteinfo 未报告时缺省。 */
+    sitename?: string;
     /** The wiki's content language ($wgLanguageCode); absent when siteinfo omitted it. */
     lang?: string;
     license?: LicenseInfo;
@@ -22,6 +24,11 @@ type SiteInfo = {
      * siteinfo 未报告时缺省。
      */
     namespaceNames?: Readonly<Record<string, number>>;
+    /**
+     * 命名空间 ID 到标准名的映射（`namespaces[].canonical`，缺失时用 `name`）。
+     * 用于补全不含前缀的标题；siteinfo 未报告时缺省。
+     */
+    namespaceCanonical?: Readonly<Record<number, string>>;
     /**
      * Wikibase 查询服务的 SPARQL 端点，由 siteinfo 发布。
      */

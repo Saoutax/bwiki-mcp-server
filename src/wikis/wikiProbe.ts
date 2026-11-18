@@ -18,6 +18,8 @@ interface WikiIdentity {
     server?: string;
     /** Article path with the `/$1` placeholder stripped; absent if omitted. */
     articlepath?: string;
+    /** 站点名（$wgSitename）；siteinfo 未报告时缺省。 */
+    sitename?: string;
     /** Content license from rightsinfo; absent unless both url and title exist. */
     license?: LicenseInfo;
     /** Wikibase 查询服务的 SPARQL 端点。 */
@@ -41,7 +43,12 @@ interface WikiProbe {
 interface SiteInfoResponse {
     query?: {
         extensions?: { name?: string }[];
-        general?: { server?: string; articlepath?: string; 'wikibase-sparql'?: string };
+        general?: {
+            server?: string;
+            articlepath?: string;
+            sitename?: string;
+            'wikibase-sparql'?: string;
+        };
         rightsinfo?: { url?: string; text?: string };
     };
 }
@@ -95,6 +102,7 @@ class WikiProbeImpl implements WikiProbe {
             extensions: entry.extensions,
             ...(entry.server !== undefined ? { server: entry.server } : {}),
             ...(entry.articlepath !== undefined ? { articlepath: entry.articlepath } : {}),
+            ...(entry.sitename !== undefined ? { sitename: entry.sitename } : {}),
             ...(entry.license !== undefined ? { license: entry.license } : {}),
             ...(entry.sparqlEndpoint !== undefined ? { sparqlEndpoint: entry.sparqlEndpoint } : {}),
         };
@@ -164,6 +172,10 @@ class WikiProbeImpl implements WikiProbe {
                 typeof general?.articlepath === 'string'
                     ? general.articlepath.replace('/$1', '')
                     : undefined;
+            const sitename =
+                typeof general?.sitename === 'string' && general.sitename !== ''
+                    ? general.sitename
+                    : undefined;
             const sparqlEndpoint =
                 typeof general?.['wikibase-sparql'] === 'string' &&
                 general['wikibase-sparql'] !== ''
@@ -179,6 +191,7 @@ class WikiProbeImpl implements WikiProbe {
                 expiresAt: this.now() + TTL_SUCCESS_MS,
                 ...(server !== undefined ? { server } : {}),
                 ...(articlepath !== undefined ? { articlepath } : {}),
+                ...(sitename !== undefined ? { sitename } : {}),
                 ...(license !== undefined ? { license } : {}),
                 ...(sparqlEndpoint !== undefined ? { sparqlEndpoint } : {}),
             };

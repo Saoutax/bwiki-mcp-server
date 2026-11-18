@@ -10,6 +10,7 @@ interface SiteInfoApiResponse {
             server?: string;
             articlepath?: string;
             lang?: string;
+            sitename?: string;
             'wikibase-sparql'?: string;
         };
         rightsinfo?: { url?: string; text?: string };
@@ -62,6 +63,7 @@ const fetchSiteInfo = async (ctx: ToolContext, wikiKey: string): Promise<SiteInf
             response.query?.namespaces,
             response.query?.namespacealiases,
         );
+        const namespaceCanonical = readNamespaceCanonical(response.query?.namespaces);
 
         const resolved: SiteInfo = {
             server: normalizeServer(general.server),
@@ -69,6 +71,9 @@ const fetchSiteInfo = async (ctx: ToolContext, wikiKey: string): Promise<SiteInf
                 typeof general.articlepath === 'string'
                     ? general.articlepath.replace('/$1', '')
                     : configured.articlepath,
+            ...(typeof general.sitename === 'string' && general.sitename !== ''
+                ? { sitename: general.sitename }
+                : {}),
             ...(typeof general.lang === 'string' && general.lang !== ''
                 ? { lang: general.lang }
                 : {}),
@@ -78,6 +83,7 @@ const fetchSiteInfo = async (ctx: ToolContext, wikiKey: string): Promise<SiteInf
             ...(license ? { license } : {}),
             ...(contentNamespaces.length > 0 ? { contentNamespaces } : {}),
             ...(Object.keys(namespaceNames).length > 0 ? { namespaceNames } : {}),
+            ...(Object.keys(namespaceCanonical).length > 0 ? { namespaceCanonical } : {}),
         };
         ctx.siteInfoCache.set(wikiKey, resolved);
         return resolved;
@@ -160,6 +166,26 @@ const readNamespaceNames = (
         }
     }
     return names;
+};
+
+// 命名空间 ID 到标准名的映射，用于把不含前缀的标题补全成页面标题。
+// canonical 缺失时回落到站点本地化的 name；主命名空间的两者都是空串，故跳过。
+const readNamespaceCanonical = (
+    namespaces: Record<string, { id?: number; name?: string; canonical?: string }> | undefined,
+): Record<number, string> => {
+    const canonical: Record<number, string> = {};
+
+    for (const entry of Object.values(namespaces ?? {})) {
+        if (typeof entry.id !== 'number') {
+            continue;
+        }
+        const name =
+            entry.canonical !== undefined && entry.canonical !== '' ? entry.canonical : entry.name;
+        if (typeof name === 'string' && name !== '') {
+            canonical[entry.id] = name;
+        }
+    }
+    return canonical;
 };
 
 export { resolveSiteInfo };

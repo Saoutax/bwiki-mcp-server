@@ -24,12 +24,14 @@ const registerAllResources = (server: McpServer, ctx: ToolContext): void => {
             const resources: Resource[] = [];
             for (const wikiKey in allWikis) {
                 const wikiConfig = allWikis[wikiKey];
+                const siteInfo = ctx.siteInfoCache.get(wikiKey);
+                // 只读缓存：列出资源时不为每个站点发起 siteinfo 请求，
+                // 故描述中显示缓存里的站点名与地址，待首次读取后才换成权威值。
+                const sitename = siteInfo?.sitename ?? wikiConfig.sitename ?? wikiKey;
                 resources.push({
                     uri: `${WIKI_RESOURCE_URI_PREFIX}${encodeWikiKey(wikiKey)}`,
                     name: `wikis/${wikiKey}`,
-                    // 只读缓存：列出资源时不为每个站点发起 siteinfo 请求，
-                    // 故描述中显示配置的地址，待首次读取后才换成权威值。
-                    description: `Wiki "${wikiConfig.sitename}" hosted at ${ctx.siteInfoCache.get(wikiKey)?.server ?? wikiConfig.server}`,
+                    description: `Wiki "${sitename}" hosted at ${siteInfo?.server ?? wikiConfig.server}`,
                 });
             }
             return { resources };

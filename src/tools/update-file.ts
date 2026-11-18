@@ -2,10 +2,12 @@ import type { CallToolResult } from '@modelcontextprotocol/server';
 import type { ApiUploadResponse } from 'mwn';
 import type { ApiUploadParams } from 'types-mediawiki-api';
 import { z } from 'zod';
-import { assertFileExists, FileNotFoundError } from '../fileExistence.ts';
+import { assertFileExists, FileNotFoundError, InvalidFileTitleError } from '../fileExistence.ts';
 import type { ToolContext } from '../runtime/context.ts';
 import type { Tool } from '../runtime/tool.ts';
 import { assertAllowedPath, UploadValidationError } from '../uploadGuard.ts';
+import { resolveSiteInfo } from '../wikis/siteInfo.ts';
+import { toNamespaceTitle } from '../wikis/titlePrefix.ts';
 import { formatEditComment, buildPageUrl } from '../wikis/utils.ts';
 
 const inputSchema = {
@@ -30,6 +32,12 @@ const updateFile: Tool<typeof inputSchema> = {
     target: a => a.title,
 
     async handle({ filepath, title, comment }, ctx: ToolContext): Promise<CallToolResult> {
+        const siteInfo = await resolveSiteInfo(ctx, ctx.activeWiki.get().key);
+        const resolvedTitle = toNamespaceTitle(title, 6, siteInfo);
+        if ('error' in resolvedTitle) {
+            return ctx.format.invalidInput(resolvedTitle.error);
+        }
+
         let resolvedPath: string;
         try {
             resolvedPath = await assertAllowedPath(filepath, ctx.uploadDirs.list());
@@ -42,8 +50,11 @@ const updateFile: Tool<typeof inputSchema> = {
 
         const mwn = await ctx.mwn();
         try {
-            await assertFileExists(mwn, title);
+            await assertFileExists(mwn, title, siteInfo);
         } catch (error) {
+            if (error instanceof InvalidFileTitleError) {
+                return ctx.format.invalidInput(error.message);
+            }
             if (error instanceof FileNotFoundError) {
                 return ctx.format.notFound(
                     `File "${error.title}" does not exist. To create a new file, use upload-file.`,
@@ -54,22 +65,31 @@ const updateFile: Tool<typeof inputSchema> = {
 
         const params: ApiUploadParams = {
             comment: formatEditComment(ctx, 'update-file', comment),
+            // 覆盖已有文件必须带 ignorewarnings；同时不发送 text，保留文件页原有文本。
             ignorewarnings: true,
         };
-        const data: ApiUploadResponse = await ctx.edit.submitUpload(
-            mwn,
-            resolvedPath,
-            title,
-            '',
-            params,
-        );
+        let data: ApiUploadResponse;
+        try {
+            data = await ctx.edit.submitUpload(
+                mwn,
+                resolvedPath,
+                resolvedTitle.bareName,
+                undefined,
+                params,
+            );
+        } catch (error) {
+            if (error instanceof UploadValidationError) {
+                return ctx.format.invalidInput(`Failed to update file: ${error.message}`);
+            }
+            throw error;
+        }
 
         const imageinfo = (
             data as ApiUploadResponse & {
                 imageinfo?: { descriptionurl?: string; url?: string };
             }
         ).imageinfo;
-        const filename = data.filename ?? title.replace(/^File:/, '');
+        const filename = data.filename ?? resolvedTitle.bareName;
         return ctx.format.ok({
             filename,
             pageUrl: imageinfo?.descriptionurl ?? (await buildPageUrl(ctx, `File:${filename}`)),

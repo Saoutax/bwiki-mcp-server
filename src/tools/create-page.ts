@@ -49,9 +49,9 @@ const createPage: Tool<typeof inputSchema> = {
         if (contentModel !== undefined) {
             baseOptions.contentmodel = contentModel;
         }
-        if (bot === true) {
-            baseOptions.bot = true;
-        }
+        // mwn.create 在展开 options 之前硬编码 bot: true，只有显式给出 false 才能覆盖。
+        // mwn 的参数预处理会丢弃值为 false 的字段，故非 bot 创建最终不带 bot 参数。
+        baseOptions.bot = bot === true;
         const options = ctx.edit.applyTags<ApiEditPageParams>(baseOptions);
         const result = await mwn.create(
             title,

@@ -3,6 +3,8 @@ import type { ApiPage, ImageInfo } from 'mwn';
 import { z } from 'zod';
 import type { ToolContext } from '../runtime/context.ts';
 import type { Tool } from '../runtime/tool.ts';
+import { resolveSiteInfo } from '../wikis/siteInfo.ts';
+import { toNamespaceTitle } from '../wikis/titlePrefix.ts';
 
 const inputSchema = {
     title: z.string().describe('File title (with or without the "File:" prefix)'),
@@ -24,13 +26,16 @@ const getFile: Tool<typeof inputSchema> = {
     target: a => a.title,
 
     async handle({ title }, ctx: ToolContext): Promise<CallToolResult> {
+        const siteInfo = await resolveSiteInfo(ctx, ctx.activeWiki.get().key);
+        const resolvedTitle = toNamespaceTitle(title, 6, siteInfo);
+        if ('error' in resolvedTitle) {
+            return ctx.format.invalidInput(resolvedTitle.error);
+        }
+
         const mwn = await ctx.mwn();
-
-        const fileTitle = title.startsWith('File:') ? title : `File:${title}`;
-
         const response = await mwn.request({
             action: 'query',
-            titles: fileTitle,
+            titles: resolvedTitle.pageTitle,
             prop: 'imageinfo',
             iiprop: 'url|size|mime|timestamp|user',
             iiurlwidth: 200,
@@ -40,6 +45,10 @@ const getFile: Tool<typeof inputSchema> = {
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mwn API response shape; trusted at this boundary
         const page = response.query?.pages?.[0] as ApiPage | undefined;
 
+        // invalid 必须早于 missing 判断：MediaWiki 对非法标题同时置两个标记。
+        if (page?.invalid === true) {
+            return ctx.format.invalidInput(`"${title}" is not a valid page title`);
+        }
         if (!page || page.missing) {
             return ctx.format.notFound(`File "${title}" not found`);
         }

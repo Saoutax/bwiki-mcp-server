@@ -1,7 +1,58 @@
-import { readFile } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 import { basename } from 'node:path';
 import type { ApiParams, Mwn, ApiUploadResponse } from 'mwn';
 import type { ApiUploadParams } from 'types-mediawiki-api';
+import { UploadValidationError } from '../uploadGuard.ts';
+
+/** action=upload 未成功时的归类，供 classifyError 映射到错误类别。 */
+type UploadWarningCode = 'fileexists' | 'badfilename' | 'upload-warning';
+
+/**
+ * action=upload 成功的判据是 `result === 'Success'`；其余结果（多为 warnings）
+ * 说明文件未被接受，继续当作成功会向调用方谎报上传完成。
+ */
+class UploadWarningError extends Error {
+    public constructor(
+        public readonly code: UploadWarningCode,
+        message: string,
+    ) {
+        super(message);
+        this.name = 'UploadWarningError';
+    }
+}
+
+// MediaWiki 用 exists 告知同名文件已存在，部分版本给出 fileexists。
+const FILE_EXISTS_WARNINGS = new Set(['exists', 'fileexists']);
+
+/**
+ * 校验 action=upload 的结果，非 Success 时抛出带错误码的 UploadWarningError。
+ *
+ * 服务端上传与 wiki 侧 copy-upload 两条路径都走这里，避免两者判定不一致。
+ */
+const assertUploadResult = (upload: ApiUploadResponse): void => {
+    // ApiUploadResponse 的字段是 any，先收窄再判断。
+    const result: unknown = upload.result;
+    if (result === 'Success') {
+        return;
+    }
+
+    const warnings: unknown = upload.warnings;
+    const warningNames =
+        warnings !== null && typeof warnings === 'object' ? Object.keys(warnings) : [];
+    let code: UploadWarningCode = 'upload-warning';
+    if (warningNames.some(name => FILE_EXISTS_WARNINGS.has(name))) {
+        code = 'fileexists';
+    } else if (warningNames.includes('badfilename')) {
+        code = 'badfilename';
+    }
+
+    const detail = warningNames.length > 0 ? warningNames.join(', ') : 'no warnings reported';
+    const resultLabel = typeof result === 'string' ? result : 'unknown';
+    throw new UploadWarningError(
+        code,
+        `Upload was not successful (result: ${resultLabel}; warnings: ${detail}).`,
+    );
+};
 
 interface EditService {
     /** Wraps mwn.request with CSRF + tag injection + formatversion=2. For action:edit and similar. */
@@ -11,23 +62,23 @@ interface EditService {
      * Uploads a local file via a multipart action=upload. Reads the file into
      * memory and delegates to submitUploadFromBytes: mwn.upload builds the
      * multipart body from fs.createReadStream, whose length is unknown, and
-     * BWiki hangs up on that.
+     * BWiki hangs up on that. `text` 为 undefined 时表示不发送该参数（不覆盖文件页文本）。
      */
     submitUpload(
         mwn: Mwn,
         filepath: string,
         title: string,
-        text: string,
+        text: string | undefined,
         params: ApiUploadParams,
     ): Promise<ApiUploadResponse>;
 
-    /** Uploads in-memory bytes via a multipart action=upload — parallel to submitUpload but without a local filepath. Injects CSRF token, tags, and ignorewarnings. The bytes are passed to form-data as a Buffer (a plain Readable has no length and form-data rejects it with "Unknown stream"). */
+    /** Uploads in-memory bytes via a multipart action=upload — parallel to submitUpload but without a local filepath. Injects CSRF token and tags; the bytes are passed to form-data as a Buffer (a plain Readable has no length and form-data rejects it with "Unknown stream"). `text` 为 undefined 时表示不发送该参数。 */
     submitUploadFromBytes(
         mwn: Mwn,
         data: Buffer,
         filename: string,
         title: string,
-        text: string,
+        text: string | undefined,
         params: ApiUploadParams,
     ): Promise<ApiUploadResponse>;
 
@@ -88,14 +139,32 @@ class EditServiceImpl implements EditService {
         mwn: Mwn,
         filepath: string,
         title: string,
-        text: string,
+        text: string | undefined,
         params: ApiUploadParams,
     ): Promise<ApiUploadResponse> {
         // 不调 mwn.upload：它用 fs.createReadStream 构造 multipart，而 Readable
         // 没有已知长度，BWiki 会挂断连接（约 55 秒后 socket hang up）。
         // 改成读成 Buffer 走 submitUploadFromBytes，长度已知，可正常发送。
-        const data = await readFile(filepath);
-        return this.submitUploadFromBytes(mwn, data, basename(filepath), title, text, params);
+        // 用 fs.open + fstat 而非 readFile：只接受普通文件，目录/设备文件等
+        // 在读取前就以明确的错误拒绝，避免把错误留到 multipart 阶段。
+        const handle = await open(filepath, 'r');
+        try {
+            const stats = await handle.stat();
+            if (!stats.isFile()) {
+                throw new UploadValidationError(`"${filepath}" is not a regular file.`);
+            }
+            const data = await handle.readFile();
+            return await this.submitUploadFromBytes(
+                mwn,
+                data,
+                basename(filepath),
+                title,
+                text,
+                params,
+            );
+        } finally {
+            await handle.close();
+        }
     }
 
     public async submitUploadFromBytes(
@@ -103,20 +172,21 @@ class EditServiceImpl implements EditService {
         data: Buffer,
         filename: string,
         title: string,
-        text: string,
+        text: string | undefined,
         params: ApiUploadParams,
     ): Promise<ApiUploadResponse> {
         const token = await mwn.getCsrfToken();
-        // 直接把 Buffer 交给 mwn 的 multipart `file` 字段：
-        // form-data 可直接计算 Buffer 长度，而 Readable 无已知长度会被拒绝。
+        // 参数顺序有意为之：params 先展开，关键字段随后覆盖，
+        // 使调用方无法改写 action/file/filename/token 等关键字段。
         const fullParams: Record<string, unknown> = {
+            ...params,
             action: 'upload',
+            // 直接把 Buffer 交给 mwn 的 multipart `file` 字段：
+            // form-data 可直接计算 Buffer 长度，而 Readable 无已知长度会被拒绝。
             file: { stream: data, name: filename },
             filename: title,
-            text,
-            ignorewarnings: true,
+            ...(text === undefined ? {} : { text }),
             token,
-            ...params,
         };
         if (this.tags.length > 0) {
             fullParams.tags = this.tags;
@@ -125,6 +195,7 @@ class EditServiceImpl implements EditService {
         const response = (await mwn.request(fullParams as ApiParams, {
             headers: { 'Content-Type': 'multipart/form-data' },
         })) as { upload: ApiUploadResponse };
+        assertUploadResult(response.upload);
         return response.upload;
     }
 
@@ -136,5 +207,5 @@ class EditServiceImpl implements EditService {
     }
 }
 
-export { EditServiceImpl };
-export type { EditService };
+export { EditServiceImpl, UploadWarningError, assertUploadResult };
+export type { EditService, UploadWarningCode };

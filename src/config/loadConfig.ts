@@ -115,6 +115,23 @@ const replaceEnvVars = (value: string): string =>
         return envValue !== undefined ? envValue : match;
     });
 
+/**
+ * 拆分 `MCP_UPLOAD_DIRS`。
+ *
+ * Windows 的路径本身含盘符冒号，故分隔符必须用 `;`（即 `path.delimiter`）；
+ * 其他平台沿用 `:`。
+ */
+const splitUploadDirList = (
+    raw: string,
+    platform: NodeJS.Platform = process.platform,
+): string[] => {
+    const delimiter = platform === 'win32' ? ';' : ':';
+    return raw
+        .split(delimiter)
+        .map(entry => entry.trim())
+        .filter(entry => entry !== '');
+};
+
 const resolveUploadDirs = (rawFromConfig: unknown): readonly string[] => {
     const fromConfig: string[] = [];
     if (rawFromConfig !== undefined) {
@@ -135,10 +152,7 @@ const resolveUploadDirs = (rawFromConfig: unknown): readonly string[] => {
     const envRaw = process.env.MCP_UPLOAD_DIRS;
     const fromEnv: string[] = [];
     if (envRaw) {
-        for (const entry of envRaw.split(':')) {
-            if (entry === '') {
-                continue;
-            }
+        for (const entry of splitUploadDirList(envRaw)) {
             if (!path.isAbsolute(entry)) {
                 throw new Error(`Config error: MCP_UPLOAD_DIRS entry "${entry}" must be absolute`);
             }
@@ -263,5 +277,6 @@ export {
     isCredentialConfigured,
     loadConfigFromFile,
     resolveConfig,
+    splitUploadDirList,
 };
 export type { WikiConfig, PublicWikiConfig, Config, ExecSecret };
