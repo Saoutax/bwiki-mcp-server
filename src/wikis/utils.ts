@@ -5,9 +5,12 @@ import { resolveSiteInfo } from './siteInfo.ts';
 const buildPageUrl = async (ctx: ToolContext, title: string): Promise<string> => {
     const { key } = ctx.activeWiki.get();
     const { server, articlepath } = await resolveSiteInfo(ctx, key);
-    // MediaWiki 习惯：空格转为下划线。encodeURI 保留 '/' 与 ':'，
-    // 并对空格与非 ASCII 字符编码。
-    return `${server}${articlepath}/${encodeURI(title.replace(/ /g, '_'))}`;
+    // MediaWiki 习惯：空格转为下划线。用 encodeURIComponent 而非 encodeURI：
+    // 后者保留 `?`、`&`、`+`，会把标题里的这些字符变成 URL 语法。
+    // 再单独恢复 '/' 与 ':'，保留子页面与命名空间前缀。
+    const encoded = encodeURIComponent(title.replace(/ /g, '_'));
+    const pagePath = encoded.replace(/%2F/gi, '/').replace(/%3A/gi, ':');
+    return `${server}${articlepath}/${pagePath}`;
 };
 
 /**

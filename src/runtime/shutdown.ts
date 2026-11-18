@@ -91,19 +91,23 @@ const runDrain = async (
                 deps.httpServer.closeIdleConnections();
             }
         }
-    } else if (deps.stdioTransport) {
+    }
+
+    // stdio：先前先关传输，会把正在提交的写调用砍断。改为先排空在途调用，
+    // 排空（或宽限期用尽）后再关传输。
+    const graceExceeded = await waitForDrain(
+        deps.inFlight,
+        deps.graceMs,
+        deps.pollIntervalMs ?? DEFAULT_POLL_MS,
+    );
+
+    if (deps.transport === 'stdio' && deps.stdioTransport) {
         try {
             await deps.stdioTransport.close();
         } catch {
             // 忽略：关闭失败不应阻塞排空。
         }
     }
-
-    const graceExceeded = await waitForDrain(
-        deps.inFlight,
-        deps.graceMs,
-        deps.pollIntervalMs ?? DEFAULT_POLL_MS,
-    );
 
     if (deps.mcpHandler) {
         try {

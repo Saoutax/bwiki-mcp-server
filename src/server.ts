@@ -18,7 +18,7 @@ const buildServerInstructions = (
     attribution: boolean,
 ): string => `Tools and resources for working with one or more BWiki wikis (wiki.biligame.com). Each configured wiki appears as an \`mcp://wikis/{wikiKey}\` resource. Every tool that operates on a wiki accepts an optional \`wiki\` argument naming the wiki to act on — pass a wiki key (or its \`mcp://wikis/{wikiKey}\` URI). Omit it to use the configured default wiki. There is no stateful "current wiki": each call targets exactly the wiki it names, and every response reports the wiki it ran against. Call \`list-wikis\` to see the whole farm roster and which wikis this server is configured for.
 
-Authentication is mandatory and is not a tool argument: the server holds a bilibili passport session obtained with \`bwiki-login\`, and every wiki call is made as that user. If the session is missing or the wiki stops recognizing it, the server ends the connection rather than falling back to anonymous access, which would attribute wiki actions to an IP address. Run \`bwiki-login\` again to re-establish it.
+Authentication is mandatory and is not a tool argument: the server holds a bilibili passport session obtained with \`bwiki-login\`, and every wiki call is made as that user. If the session is missing or the wiki stops recognizing it, wiki tool calls return an authentication error and the server opens the login page; the MCP connection stays open, and retrying after login succeeds. It never falls back to anonymous access, which would attribute wiki actions to an IP address. Run \`bwiki-login\` again to re-establish it.
 
 ${attribution ? ATTRIBUTION_LINE : 'Writes, deletes, and uploads act as the signed-in bilibili user.'}
 

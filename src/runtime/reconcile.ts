@@ -28,29 +28,12 @@ interface ToolGatingRule {
     readonly isAllowed: (ctx: ReconcileContext) => boolean | Promise<boolean>;
 }
 
-const STDIO_ONLY_TOOLS: readonly string[] = ['oauth-status', 'oauth-logout'];
-
 const STATIC_RULES: readonly ToolGatingRule[] = [
     {
         name: 'read-only',
         affects: WRITE_TOOL_NAMES,
         // 任一已配置站点可写即保留写工具；只读站点由按调用的校验拒绝。
         isAllowed: c => Object.values(c.allWikis).some(w => w.readOnly !== true),
-    },
-    {
-        name: 'stdio-only',
-        affects: STDIO_ONLY_TOOLS,
-        isAllowed: c => c.transport === 'stdio',
-    },
-    {
-        name: 'wiki-mgmt',
-        affects: ['add-wiki'],
-        isAllowed: c => c.allowManagement,
-    },
-    {
-        name: 'remove-wiki',
-        affects: ['remove-wiki'],
-        isAllowed: c => c.allowManagement && c.wikiCount >= 2,
     },
     {
         // 始终提供：本工具的 list-wikis 报告整个农场名册，与配置数量无关。
@@ -66,13 +49,16 @@ const buildExtensionRules = (packs: readonly ExtensionPack[]): readonly ToolGati
             name: `${pack.id}-extension`,
             affects: pack.tools.map(t => t.name),
             // 任一已配置站点具备该扩展即提供；缺失者由按调用校验拒绝。
+            // 站点探测失败（不可达）时无从判断，按 fail-open 保留工具。
             isAllowed: async (c: ReconcileContext) => {
-                const results = await Promise.all(
-                    Object.keys(c.allWikis).map(key =>
-                        c.wikiProbe.hasAnyExtension(key, pack.extensionNames),
-                    ),
+                const identities = await Promise.all(
+                    Object.keys(c.allWikis).map(key => c.wikiProbe.inspect(key)),
                 );
-                return results.some(r => r);
+                return identities.some(
+                    identity =>
+                        !identity.reachable ||
+                        pack.extensionNames.some(name => identity.extensions.has(name)),
+                );
             },
         },
         ...wikiGateRule(pack),
@@ -88,18 +74,18 @@ const wikiGateRule = (pack: ExtensionPack): ToolGatingRule[] => {
         {
             name: `${pack.id}-wiki-gate`,
             affects: gate.tools,
-            // 按站点取交集：仅在某个站点同时满足扩展与门槛时提供该工具。
+            // 按站点取交集：仅在某个站点同时满足扩展与门槛时提供该工具；
+            // 站点不可达时同样 fail-open，留给按调用校验判断。
             isAllowed: async (c: ReconcileContext) => {
-                const results = await Promise.all(
-                    Object.keys(c.allWikis).map(async key => {
-                        const identity = await c.wikiProbe.inspect(key);
-                        return (
-                            pack.extensionNames.some(name => identity.extensions.has(name)) &&
-                            gate.isSatisfied(identity)
-                        );
-                    }),
+                const identities = await Promise.all(
+                    Object.keys(c.allWikis).map(key => c.wikiProbe.inspect(key)),
                 );
-                return results.some(r => r);
+                return identities.some(
+                    identity =>
+                        !identity.reachable ||
+                        (pack.extensionNames.some(name => identity.extensions.has(name)) &&
+                            gate.isSatisfied(identity)),
+                );
             },
         },
     ];
@@ -166,5 +152,5 @@ const toggle = (tool: RegisteredTool | undefined, shouldBeEnabled: boolean): voi
     }
 };
 
-export { computeDesiredEnabledState, reconcileTools };
+export { buildExtensionRules, computeDesiredEnabledState, reconcileTools };
 export type { Reconcile, ReconcileDeps, ReconcileContext, ToolGatingRule };

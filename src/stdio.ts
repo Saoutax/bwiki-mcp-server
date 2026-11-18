@@ -16,8 +16,10 @@ import { readStoredSessionIfValid } from './bwiki/sessionGate.ts';
 import { loadConfigFromFile } from './config/loadConfig.ts';
 import { emitStartupBanner } from './runtime/banner.ts';
 import { createToolContext } from './runtime/createContext.ts';
+import { inFlight } from './runtime/inFlight.ts';
 import { logger } from './runtime/logger.ts';
-import { registerShutdownHandlers } from './runtime/shutdown.ts';
+import { registerShutdownHandlers, resolveShutdownGrace } from './runtime/shutdown.ts';
+import { guardStdout } from './runtime/stdoutGuard.ts';
 import { createServer } from './server.ts';
 import { createAppState } from './wikis/state.ts';
 
@@ -55,6 +57,10 @@ const main = async (): Promise<void> => {
     if (exitCode !== null) {
         process.exit(exitCode);
     }
+
+    // stdout 只承载 JSON-RPC 帧：必须在读取配置、创建 mwn 之前改道杂散输出，
+    // 否则 mwn 的日志会混进协议流。
+    guardStdout();
 
     // 先查配置：无站点可服务的错误不应报成登录问题。
     const config = loadConfigFromFile();
@@ -97,10 +103,12 @@ const main = async (): Promise<void> => {
         logger.error(`session ended, re-login required: ${reason}`);
     });
 
-    // stdio 无在途队列，graceMs 记 0。
+    // stdio：关闭信号到达时先排空在途工具调用，再关传输。
+    // 宽限期由 MCP_SHUTDOWN_GRACE_MS 控制，超时以 1 退出。
     registerShutdownHandlers({
         transport: 'stdio',
-        graceMs: 0,
+        graceMs: resolveShutdownGrace(process.env),
+        inFlight,
         stdioTransport: handle,
     });
 };

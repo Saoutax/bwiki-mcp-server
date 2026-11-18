@@ -179,8 +179,13 @@ const withParams = (url: string, params?: Record<string, string>): string => {
     if (params === undefined) {
         return url;
     }
-    const queryString = new URLSearchParams(params).toString();
-    return queryString === '' ? url : `${url}?${queryString}`;
+    // 走 URL.searchParams 合并：直接拼 "?..." 会与已有查询串相撞，
+    // 也不会转义值里的 `&`、`+`。
+    const parsed = new URL(url);
+    for (const [name, value] of Object.entries(params)) {
+        parsed.searchParams.set(name, value);
+    }
+    return parsed.toString();
 };
 
 export {

@@ -3,11 +3,19 @@ import { Writable } from 'node:stream';
 import { Mwn } from 'mwn';
 import { emitTelemetryEvent } from './logger.ts';
 
+/** 已安装的标记：重复调用会再包一层 console 并让日志流互相缠绕。 */
+let installed = false;
+
 /**
  * stdio 下 stdout 只承载 JSON-RPC 帧，任何杂散输出都会让客户端解析失败。
  * 本模块把 mwn 与 console 的输出改道到结构化 stderr 日志。
  */
 const guardStdout = (): void => {
+    if (installed) {
+        return;
+    }
+    installed = true;
+
     const sink = createLogSink();
 
     // 把 mwn 的日志输出指离 process.stdout，同时禁用其彩色转义。

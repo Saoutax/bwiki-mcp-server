@@ -5,8 +5,10 @@
  */
 
 import { Mwn } from 'mwn';
-import { DEFAULT_SESSION_FILE } from '../config/loadConfig.ts';
+import { DEFAULT_SESSION_FILE, loadConfigFromFile, type WikiConfig } from '../config/loadConfig.ts';
+import { callDeadline, WIKI_CONNECT_TIMEOUT_MS } from '../runtime/callDeadline.ts';
 import { USER_AGENT } from '../runtime/constants.ts';
+import { withCallBounds } from '../wikis/abortableMwn.ts';
 import { readSessionFile, wikiCookiePartsFor, type StoredSession } from './cookie.ts';
 
 class NoSessionError extends Error {
@@ -44,9 +46,14 @@ const readStoredSessionIfValid = async (
     return session;
 };
 
-/** 询问某个已配置 wiki 当前身份。任一站点的结论对全部有效。 */
+/**
+ * 询问某个已配置 wiki 当前身份。任一站点的结论对全部有效。
+ *
+ * 与常规调用一样受连接预算约束：wiki 不可达时 30s 内放弃，
+ * 不阻塞启动。
+ */
 const probeIdentity = async (session: StoredSession): Promise<string | undefined> => {
-    const { apiUrl } = await firstWikiEndpoint();
+    const { apiUrl } = firstWikiEndpoint();
     const bot = new Mwn({ apiUrl, userAgent: USER_AGENT });
     for (const cookie of wikiCookiePartsFor(session)) {
         try {
@@ -56,17 +63,27 @@ const probeIdentity = async (session: StoredSession): Promise<string | undefined
             // 格式错误的条目不中断启动，由下方探测判断是否有可用凭证。
         }
     }
-    const user = await bot.userinfo();
+    // 必须在 withCallBounds 视图上调用：直接调用会绕过连接预算。
+    const bounded = withCallBounds(bot, callDeadline(WIKI_CONNECT_TIMEOUT_MS, 'connecting'));
+    const user = await bounded.userinfo();
     return user?.name ?? user?.userName;
 };
 
-/** The api.php URL of the first configured wiki. */
-const firstWikiEndpoint = async (): Promise<{ apiUrl: string }> => {
-    const { loadConfigFromFile } = await import('../config/loadConfig.ts');
-    const { createAppState } = await import('../wikis/state.ts');
-    const state = createAppState(loadConfigFromFile());
-    const { config: wiki } = state.activeWiki.get();
+/**
+ * 第一个已配置 wiki 的端点。直接读配置，不为一次探测构造 AppState。
+ */
+const firstWikiEndpoint = (): { apiUrl: string } => {
+    const config = loadConfigFromFile();
+    const configured = Object.keys(config.wikis);
+    const firstKey = config.defaultWiki !== '' ? config.defaultWiki : configured[0];
+    if (firstKey === undefined) {
+        throw new Error('No wikis configured');
+    }
+    const wiki: WikiConfig | undefined = config.wikis[firstKey];
+    if (wiki === undefined) {
+        throw new Error(`Wiki "${firstKey}" not found in configuration`);
+    }
     return { apiUrl: `${wiki.server}${wiki.scriptpath}/api.php` };
 };
 
-export { NoSessionError, readStoredSessionIfValid };
+export { NoSessionError, readStoredSessionIfValid, probeIdentity };

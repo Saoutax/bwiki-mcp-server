@@ -1,3 +1,10 @@
+import {
+    RedirectDropsBodyError,
+    InsecureRedirectError,
+    TooManyRedirectsError,
+    UnusableLocationError,
+} from '../requestChain.ts';
+import { SsrfValidationError } from '../ssrfGuard.ts';
 import { CredentialResolutionError } from './credentialResolutionError.ts';
 import { WikiTimeoutError } from './wikiTimeoutError.ts';
 
@@ -72,6 +79,10 @@ const MW_CODE_TO_CATEGORY: Record<string, ErrorCategory> = {
     'mwoauth-invalid-authorization': 'authentication',
     // rate_limited
     ratelimited: 'rate_limited',
+    // 上传：文件名被服务端改写属于调用方输入问题；
+    // upload-warning 是 action=upload 的通用警告，既非成功也不是已知的文件冲突。
+    badfilename: 'invalid_input',
+    'upload-warning': 'upstream_failure',
     // 未识别的错误码也归入此类
     readonly: 'upstream_failure',
     // 本服务自身产生的码，列出以便扩展包冲突检查覆盖。
@@ -83,6 +94,19 @@ const CODE_PREFIX_PATTERNS: readonly (readonly [RegExp, ErrorCategory])[] = [
     [/^internal_api_error_/, 'upstream_failure'],
 ];
 
+/**
+ * 上游以 HTTP 状态码表达限流的取值。
+ *
+ * 429 是标准限流，567/514 是 EdgeOne 的拦截。三者都应让调用方退避后重试，
+ * 而不是报成上游故障。
+ */
+const RATE_LIMIT_STATUSES = new Set([429, 567, 514]);
+
+const responseStatusOf = (err: object): number | undefined => {
+    const response = (err as { response?: { status?: unknown } }).response;
+    return typeof response?.status === 'number' ? response.status : undefined;
+};
+
 // 部分错误码只出现在消息里，用以下模式推断后再查表。
 const MESSAGE_FALLBACK_PATTERNS: readonly (readonly [RegExp, string])[] = [
     [/\bmissingtitle\b/i, 'missingtitle'],
@@ -91,6 +115,14 @@ const MESSAGE_FALLBACK_PATTERNS: readonly (readonly [RegExp, string])[] = [
     [/\beditconflict\b/i, 'editconflict'],
     [/\bratelimited\b/i, 'ratelimited'],
 ];
+
+/** 这些异常由本地安全策略产生，属于调用方输入问题而非上游故障。 */
+const isInputValidationError = (err: unknown): boolean =>
+    err instanceof SsrfValidationError ||
+    err instanceof InsecureRedirectError ||
+    err instanceof RedirectDropsBodyError ||
+    err instanceof TooManyRedirectsError ||
+    err instanceof UnusableLocationError;
 
 /**
  * 扩展包提供的错误码。
@@ -113,7 +145,17 @@ const classifyError = (
     if (err instanceof WikiTimeoutError) {
         return { category: 'upstream_failure', code: 'request-timeout' };
     }
+    // 本地安全策略的拒绝：问题在目标 URL，归为调用方输入错误。
+    if (isInputValidationError(err)) {
+        return { category: 'invalid_input' };
+    }
     if (err !== null && typeof err === 'object') {
+        // 状态码优先于错误码：限流由传输层表达，码表里未必有对应项。
+        const status = responseStatusOf(err);
+        if (status !== undefined && RATE_LIMIT_STATUSES.has(status)) {
+            return { category: 'rate_limited' };
+        }
+
         const code = (err as { code?: unknown }).code;
         if (typeof code === 'string') {
             // 先查核心定义；重叠在注册时已拒绝。
@@ -127,8 +169,11 @@ const classifyError = (
                 }
             }
         }
+
+        // 码表与前缀都没命中时再看消息：有些 MediaWiki 错误只把码写进文案，
+        // 即使 err.code 是个无关的字符串也应尝试推断。
         const message = (err as { message?: unknown }).message;
-        if (typeof code !== 'string' && typeof message === 'string') {
+        if (typeof message === 'string') {
             for (const [pattern, inferredCode] of MESSAGE_FALLBACK_PATTERNS) {
                 if (pattern.test(message)) {
                     return {

@@ -6,6 +6,7 @@
  */
 
 import { logger } from '../runtime/logger.ts';
+import { getRequestDeadline } from '../runtime/requestContext.ts';
 
 /** EdgeOne 的拦截状态码。 */
 const EDGEONE_BLOCK_STATUS = new Set([567, 514]);
@@ -29,7 +30,7 @@ class RequestThrottle {
     /** 串行化：下一次请求必须等此 promise 完成。 */
     private tail: Promise<void> = Promise.resolve();
 
-    /** Timestamp of the last request that actually went out. */
+    /** 最近一次请求的发出时刻（非完成时刻）。 */
     private lastSentAt = 0;
 
     /** When the cooldown started, or 0 when there is none. */
@@ -49,8 +50,23 @@ class RequestThrottle {
      * 按间隔等待后执行 `send`。
      *
      * 调用方用 `reportBlock(status)` 回传状态。冷却作用于下一次请求。
+     *
+     * 队列在 `send` 结束之后才放行：否则并发调用者会在前一个请求仍在途中
+     * 就完成间隔判断，实际发出时刻仍可能挤在一起。
+     *
+     * `signal` 用于取消等待：调用方取消后不必等完剩余冷却/间隔。
      */
-    async run<T>(send: () => Promise<T>): Promise<T> {
+    async run<T>(send: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+        // 排队等待同时受调用方取消与本次调用的 150s 预算约束：
+        // 冷却最长 180s，若无预算限制，等待会超出客户端超时。
+        const deadline = getRequestDeadline();
+        const effectiveSignal =
+            signal === undefined
+                ? deadline?.signal
+                : deadline === undefined
+                  ? signal
+                  : AbortSignal.any([signal, deadline.signal]);
+
         // 排在已有等待之后，并发调用也会串行。
         const prior = this.tail;
         let release: () => void = () => {};
@@ -60,12 +76,14 @@ class RequestThrottle {
 
         try {
             await prior;
-            await this.waitTurn();
+            await this.waitTurn(effectiveSignal);
+            // 在 send 之前记录：间隔按「上次开始到本次开始」计，
+            // 慢请求的耗时不会额外拉长节流间隔。
+            this.lastSentAt = Date.now();
+            return await send();
         } finally {
             release();
         }
-
-        return send();
     }
 
     /** 记录被拦截，进入冷却。仅识别 567 与 514。 */
@@ -84,30 +102,50 @@ class RequestThrottle {
         );
     }
 
-    /** 记录请求完成，供下一次计算间隔。成功与否都要调用。 */
+    /**
+     * 记录请求完成。`run` 已在发送前记录发送时刻，这里保留以兼容既有调用方。
+     */
     noteSent(): void {
         this.lastSentAt = Date.now();
     }
 
-    /** 等待轮到本次请求。 */
-    private async waitTurn(): Promise<void> {
+    /** 等待轮到本次请求。冷却等待可被 `signal` 中断。 */
+    private async waitTurn(signal?: AbortSignal): Promise<void> {
+        signal?.throwIfAborted();
         for (;;) {
             const now = Date.now();
             const cooldownRemaining = this.cooldownUntil - now;
             if (cooldownRemaining > 0) {
-                await sleep(cooldownRemaining);
+                // 用户决定：被拦截后仍然等待冷却，而非直接失败。
+                await sleep(cooldownRemaining, signal);
                 continue;
             }
             const sinceLast = now - this.lastSentAt;
             if (sinceLast < this.minIntervalMs) {
-                await sleep(this.minIntervalMs - sinceLast);
+                await sleep(this.minIntervalMs - sinceLast, signal);
             }
             return;
         }
     }
 }
 
-const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+/** 可被 `signal` 中断的 sleep；中断时以 signal 的原因拒绝。 */
+const sleep = (ms: number, signal?: AbortSignal): Promise<void> =>
+    new Promise((resolve, reject) => {
+        if (signal?.aborted === true) {
+            reject(signal.reason ?? new Error('Request aborted'));
+            return;
+        }
+        const onAbort = (): void => {
+            clearTimeout(timer);
+            reject(signal?.reason ?? new Error('Request aborted'));
+        };
+        const timer = setTimeout(() => {
+            signal?.removeEventListener('abort', onAbort);
+            resolve();
+        }, ms);
+        signal?.addEventListener('abort', onAbort, { once: true });
+    });
 
 export { EDGEONE_BLOCK_STATUS, COOLDOWN_MS, MIN_INTERVAL_MS, RequestThrottle };
 export type { ThrottleOptions };
