@@ -80,6 +80,10 @@ const getPageHistory: Tool<typeof inputSchema> = {
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mwn API response shape; trusted at this boundary
         const page = response.query?.pages?.[0] as ApiPage | undefined;
 
+        if (page?.invalid === true) {
+            return ctx.format.invalidInput(`"${title}" is not a valid page title`);
+        }
+
         if (page?.missing) {
             return ctx.format.notFound(`Page "${title}" not found`);
         }

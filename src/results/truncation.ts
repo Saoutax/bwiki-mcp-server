@@ -19,7 +19,7 @@ type TruncationInfo =
           returnedCount: number;
           itemNoun: string;
           toolName: string;
-          continueWith: { param: string; value: string | number };
+          continueWith: { param: string; value: string | number | readonly string[] };
       }
     | {
           reason: 'capped-no-continuation';

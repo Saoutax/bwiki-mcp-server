@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { wikiCookiePartsFor, readSessionFile } from '../bwiki/cookie.ts';
 import { discoverFarmWikis, type FarmWiki } from '../bwiki/farm.ts';
 import { DEFAULT_SESSION_FILE, loadConfigFromFile } from '../config/loadConfig.ts';
+import type { TruncationInfo } from '../results/truncation.ts';
 import type { ToolContext } from '../runtime/context.ts';
 import type { Tool } from '../runtime/tool.ts';
 
@@ -60,6 +61,7 @@ interface ListWikisResult {
     total: number;
     returned: number;
     truncated: boolean;
+    truncation?: TruncationInfo;
 }
 
 const listWikis: Tool<typeof inputSchema> = {
@@ -92,7 +94,9 @@ const listWikis: Tool<typeof inputSchema> = {
             .filter(([key]) => !rosterKeys.has(key))
             .map(([key, config]) => ({
                 key,
-                sitename: config.sitename,
+                // 配置里的 sitename 可能留空（启动时从 siteinfo 读取），
+                // 此时用缓存值，再退到代号。空串与缺失同样处理，故用 ||。
+                sitename: ctx.siteInfoCache.get(key)?.sitename || config.sitename || key,
                 server: config.server,
                 configured: true,
             }));
@@ -136,6 +140,18 @@ const listWikis: Tool<typeof inputSchema> = {
             total: filtered.length,
             returned: wikis.length,
             truncated: filtered.length > wikis.length,
+            ...(filtered.length > wikis.length
+                ? {
+                      truncation: {
+                          reason: 'capped-no-continuation',
+                          returnedCount: wikis.length,
+                          limit,
+                          itemNoun: 'wikis',
+                          narrowHint:
+                              'Use query to match by name or key, or raise limit, to see more wikis.',
+                      } satisfies TruncationInfo,
+                  }
+                : {}),
         };
         return ctx.format.ok(payload);
     },

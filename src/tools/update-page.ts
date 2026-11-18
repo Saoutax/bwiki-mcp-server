@@ -122,10 +122,15 @@ const writePlan = (args: UpdatePageArgs): WritePlan => {
     }
     const resolved: Operation = operation ?? mode ?? 'replace';
     // 节号按当前版本解析，因此需与读取时的版本一致。
-    // 仅 replace 强制要求，误写的代价是该节内容被覆盖。
-    if (resolved === 'replace' && section !== undefined && section > 0 && latestId === undefined) {
+    // find-replace 自己在读取后按所读版本提交，是唯一例外。
+    if (
+        resolved !== 'find-replace' &&
+        section !== undefined &&
+        section > 0 &&
+        latestId === undefined
+    ) {
         return {
-            error: `Section ${section} names a different section once the page changes, so replacing a section needs latestId to say which revision the number was read from. Any get-page read that returns wikitext reports it as latestRevisionId.`,
+            error: `Section ${section} is resolved against a revision, not against whichever is current, so operation '${resolved}' with section set needs latestId to say which revision the section number was read from. Any get-page read that returns wikitext reports it as latestRevisionId.`,
         };
     }
     if (resolved === 'find-replace') {

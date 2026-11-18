@@ -87,6 +87,10 @@ const getPage: Tool<typeof inputSchema> = {
             }
             const page = await mwn.read(title, readParams);
 
+            if (page.invalid === true) {
+                return ctx.format.invalidInput(`"${title}" is not a valid page title`);
+            }
+
             if (page.missing) {
                 return ctx.format.notFound(`Page "${title}" not found`);
             }

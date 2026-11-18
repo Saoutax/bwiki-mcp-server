@@ -43,6 +43,16 @@ const extractCells = (rowHtml: string): Cell[] => {
 const findCell = (cells: Cell[], classFragment: string): Cell | undefined =>
     cells.find(c => c.className.includes(classFragment));
 
+// 行号单元格的文案随界面语言而变（如「第 5 行」），故先认英文 "Line N"，
+// 再退回其中任意数字。
+const hunkLineNumber = (text: string): string | undefined => {
+    const english = text.match(/Line\s+(\d+)/i);
+    if (english) {
+        return english[1];
+    }
+    return text.match(/(\d+)/)?.[1];
+};
+
 const inlineDiffToText = (html: string): string => {
     if (!html) {
         return '';
@@ -57,12 +67,12 @@ const inlineDiffToText = (html: string): string => {
 
         const linenoCell = findCell(cells, 'diff-lineno');
         if (linenoCell) {
-            const text = stripTags(linenoCell.inner);
-            const m = text.match(/Line\s+(\d+)/i);
-            if (m) {
-                lines.push(`@@ Line ${m[1]} @@`);
+            const lineNumber = hunkLineNumber(stripTags(linenoCell.inner));
+            if (lineNumber !== undefined) {
+                lines.push(`@@ Line ${lineNumber} @@`);
             }
-            continue;
+            // 行号行之外不再有 context/deleted/added 单元格，
+            // 但不应直接跳过：某些皮肤把行号与内容放在同一行。
         }
 
         const contextCell = findCell(cells, 'diff-context');

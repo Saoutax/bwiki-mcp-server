@@ -47,7 +47,7 @@ const extensionErrorVocabulary = (packs: readonly ExtensionPack[]): ExtensionErr
                     `Extension packs "${claimed}" and "${pack.id}" both declare error code "${code}".`,
                 );
             }
-            owner.set(code, code);
+            owner.set(code, pack.id);
             codes[code] = category;
         }
         prefixes.push(...(pack.errorCodePrefixes ?? []));

@@ -37,7 +37,7 @@ interface WhoamiResult {
 const whoami: Tool<typeof inputSchema> = {
     name: 'whoami',
     description:
-        'Returns the identity the current session is authenticated as on the targeted wiki: the username, whether the session is anonymous (no user is logged in), and the user groups it belongs to. Set includeRights to also return the full list of user rights. Use to confirm who edits and uploads will be attributed to before writing — for example, to resolve your own username before building a title under your own user namespace (User:<username>/…). Reports anonymous access rather than failing when the session has no credentials. For which wikis have stored OAuth tokens and their scopes, use oauth-status instead.',
+        'Returns the identity the current session is authenticated as on the targeted wiki: the username and the user groups it belongs to. Set includeRights to also return the full list of user rights. Use to confirm who edits and uploads will be attributed to before writing — for example, to resolve your own username before building a title under your own user namespace (User:<username>/…). Like every wiki tool it needs the bilibili session bwiki-login stores: with no session the call fails rather than reporting anonymous access.',
     inputSchema,
     annotations: {
         title: 'Who am I',

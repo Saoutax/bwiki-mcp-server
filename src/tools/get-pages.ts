@@ -38,11 +38,14 @@ interface PageRev {
 }
 
 interface ApiPageLike {
-    pageid: number;
+    pageid?: number;
     title: string;
     missing?: boolean;
+    invalid?: boolean;
     revisions?: PageRev[];
 }
+
+type Alias = { from: string; to: string };
 
 type FetchResult = {
     byResolvedTitle: Map<string, ApiPageLike>;
@@ -131,9 +134,26 @@ const fetchPages = async (
     };
     if (!args.followRedirects) {
         // 不跟随重定向，原样返回重定向伪页面。
-        const response = await mwn.read(args.titles, { rvprop, redirects: false });
-        const pages: ApiPageLike[] = Array.isArray(response) ? response : [response];
-        for (const page of pages) {
+        // 不用 mwn.read：它会丢弃 normalized，别名与请求标题对不上。
+        const response = await mwn.request({
+            action: 'query',
+            titles: args.titles,
+            prop: 'revisions',
+            rvprop,
+            rvslots: 'main',
+            redirects: false,
+            formatversion: '2',
+        });
+        const query = response?.query;
+        if (!query) {
+            return result;
+        }
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mwn API response shape; trusted at this boundary
+        for (const entry of (query.normalized ?? []) as Alias[]) {
+            result.aliasTo.set(entry.from, entry.to);
+        }
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mwn API response shape; trusted at this boundary
+        for (const page of (query.pages ?? []) as ApiPageLike[]) {
             result.byResolvedTitle.set(page.title, normalisePage(page, ctx));
         }
         return result;
@@ -155,7 +175,6 @@ const fetchPages = async (
         if (!query) {
             continue;
         }
-        type Alias = { from: string; to: string };
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mwn API response shape; trusted at this boundary
         for (const entry of (query.normalized ?? []) as Alias[]) {
             result.aliasTo.set(entry.from, entry.to);
@@ -240,13 +259,13 @@ const applyResponseBudget = (entries: PageEntry[], pending: PendingTruncation[])
 };
 
 // 续读标记直接列出来包含的页面名，而非报告页数上限。
+// 以数组交付：标题可含逗号，也可含管道符，拼接后再拆分无法还原。
 const omittedPagesTruncation = (returnedCount: number, omitted: string[]): TruncationInfo => ({
     reason: 'more-available',
     returnedCount,
     itemNoun: 'pages',
     toolName: 'get-pages',
-    // 用管道符分隔：标题可含逗号，但不会含管道符。
-    continueWith: { param: 'titles', value: omitted.join('|') },
+    continueWith: { param: 'titles', value: omitted },
 });
 
 const applyTruncations = async (
@@ -276,21 +295,39 @@ const assembleEntries = async (
     args: GetPagesArgs,
     fetched: FetchResult,
     ctx: ToolContext,
-): Promise<{ entries: PageEntry[]; missing: string[]; pending: PendingTruncation[] }> => {
+): Promise<{
+    entries: PageEntry[];
+    missing: string[];
+    invalid: string[];
+    pending: PendingTruncation[];
+}> => {
     const entryPromises: Promise<PageEntry>[] = [];
     const emitted = new Set<string>();
     const missing: string[] = [];
     const missingSeen = new Set<string>();
+    const invalid: string[] = [];
+    const invalidSeen = new Set<string>();
     const pending: PendingTruncation[] = [];
     for (const requested of args.titles) {
-        const { resolved, viaRedirect } = args.followRedirects
-            ? resolveChain(requested, fetched.aliasTo, fetched.redirectFrom)
-            : { resolved: requested, viaRedirect: false };
+        // 归一化不跟随重定向：只有在 redirects:true 时 aliasTo 才含重定向边。
+        const { resolved, viaRedirect } = resolveChain(
+            requested,
+            fetched.aliasTo,
+            fetched.redirectFrom,
+        );
         const page = fetched.byResolvedTitle.get(resolved);
         if (!page || page.missing) {
             if (!missingSeen.has(requested)) {
                 missingSeen.add(requested);
                 missing.push(requested);
+            }
+            continue;
+        }
+        if (page.invalid === true) {
+            // 与 missing 一样按请求的标题报告，便于调用方定位入参。
+            if (!invalidSeen.has(requested)) {
+                invalidSeen.add(requested);
+                invalid.push(requested);
             }
             continue;
         }
@@ -301,12 +338,12 @@ const assembleEntries = async (
         entryPromises.push(buildPageEntry(requested, page, viaRedirect, args, ctx));
     }
     const entries = await Promise.all(entryPromises);
-    return { entries, missing, pending };
+    return { entries, missing, invalid, pending };
 };
 
 const getPages: Tool<typeof inputSchema> = {
     name: 'get-pages',
-    description: `Returns multiple wiki pages in one call (wikitext source or metadata only). Suited to reading a cluster of related pages, diffing a page family, or syncing pages to local storage. Accepts up to ${MAX_TITLES} titles; missing pages are reported inline (not as errors). One byte budget covers the whole response, 75000 bytes by default: pages come back whole in the order asked for until it is spent, and the pages past that point are named rather than returned, so a follow-up call for those names fetches the rest. Only a first page larger than the budget on its own is truncated, with a marker reporting how much of it was returned and which sections a narrower read can target. For a single page or HTML output, use get-page. requestedTitle is included only when it differs from the resolved title.`,
+    description: `Returns multiple wiki pages in one call (wikitext source or metadata only). Suited to reading a cluster of related pages, diffing a page family, or syncing pages to local storage. Accepts up to ${MAX_TITLES} titles; missing pages are reported inline (not as errors), and titles the wiki rejects as invalid are reported separately under invalid. One byte budget covers the whole response, 75000 bytes by default: pages come back whole in the order asked for until it is spent, and the pages past that point are named rather than returned, so a follow-up call for those names fetches the rest. Only a first page larger than the budget on its own is truncated, with a marker reporting how much of it was returned and which sections a narrower read can target. For a single page or HTML output, use get-page. requestedTitle is included only when it differs from the resolved title.`,
     inputSchema,
     annotations: {
         title: 'Get pages',
@@ -329,13 +366,14 @@ const getPages: Tool<typeof inputSchema> = {
                 ? 'ids|timestamp|contentmodel|content'
                 : 'ids|timestamp|contentmodel';
         const fetched = await fetchPages(mwn, ctx, args, rvprop);
-        const { entries, missing, pending } = await assembleEntries(args, fetched, ctx);
+        const { entries, missing, invalid, pending } = await assembleEntries(args, fetched, ctx);
         const omitted = applyResponseBudget(entries, pending);
         await applyTruncations(mwn, ctx, entries, pending);
 
         return ctx.format.ok({
             pages: entries,
             ...(missing.length > 0 ? { missing } : {}),
+            ...(invalid.length > 0 ? { invalid } : {}),
             ...(omitted.length > 0
                 ? { truncation: omittedPagesTruncation(entries.length, omitted) }
                 : {}),
@@ -343,4 +381,4 @@ const getPages: Tool<typeof inputSchema> = {
     },
 };
 
-export { BatchContentFormat, getPages };
+export { applyResponseBudget, BatchContentFormat, getPages };
