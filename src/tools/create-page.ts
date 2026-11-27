@@ -3,6 +3,7 @@ import type { ApiEditPageParams } from 'types-mediawiki-api';
 import { z } from 'zod';
 import type { ToolContext } from '../runtime/context.ts';
 import type { Tool } from '../runtime/tool.ts';
+import { MODERATION_WRITE_NOTICE } from '../services/moderationService.ts';
 import { buildPageUrl, formatEditComment } from '../wikis/utils.ts';
 
 const inputSchema = {
@@ -28,7 +29,7 @@ const inputSchema = {
 const createPage: Tool<typeof inputSchema> = {
     name: 'create-page',
     description:
-        "Creates a new wiki page with the provided content and returns the new page's title, page ID, and first revision ID. Fails if a page with the given title already exists; for existing pages, use update-page. The optional contentModel parameter selects a non-default content format (e.g. javascript, css); when omitted, MediaWiki picks the default for the title's namespace. Source carries the whole page in one call: there is no length limit here beyond the wiki's own maximum page size (reported as maxarticlesize by get-site-info, 2 MB on BWiki), so content of any ordinary size — a source file, a module, a long article — belongs in a single create-page rather than being split. Splitting is only for content that exceeds that maximum, by pairing create-page with chained update-page(operation='append') calls, each adding a chunk.",
+        "Creates a new wiki page with the provided content and returns the new page's title, page ID, and first revision ID. Fails if a page with the given title already exists; for existing pages, use update-page. The optional contentModel parameter selects a non-default content format (e.g. javascript, css); when omitted, MediaWiki picks the default for the title's namespace. On wikis with the Moderation extension, an account without skip-moderation has its creation queued for review: the response then reports moderated: true and the page stays absent until the edit is approved. Source carries the whole page in one call: there is no length limit here beyond the wiki's own maximum page size (reported as maxarticlesize by get-site-info, 2 MB on BWiki), so content of any ordinary size — a source file, a module, a long article — belongs in a single create-page rather than being split. Splitting is only for content that exceeds that maximum, by pairing create-page with chained update-page(operation='append') calls, each adding a chunk.",
     inputSchema,
     annotations: {
         title: 'Create page',
@@ -60,12 +61,16 @@ const createPage: Tool<typeof inputSchema> = {
             options,
         );
 
+        const pending = await ctx.moderation.afterWrite(mwn, result.title);
         return ctx.format.ok({
             pageId: result.pageid,
             title: result.title,
             latestRevisionId: result.newrevid,
             latestRevisionTimestamp: result.newtimestamp,
             contentModel: result.contentmodel,
+            ...(pending !== undefined
+                ? { moderated: true, moderationNotice: MODERATION_WRITE_NOTICE }
+                : {}),
             ...(bot === true ? { botMarked: await ctx.edit.botRight(mwn) } : {}),
             url: await buildPageUrl(ctx, result.title),
         });

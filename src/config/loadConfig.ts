@@ -65,6 +65,10 @@ interface Config {
      * 写入时附加的 MediaWiki 变更标签，全局作用于所有已配置站点。
      */
     editTags: readonly string[];
+    /**
+     * 写入后是否查询审核队列，并在响应中标注待审编辑。
+     */
+    moderationAwareness: boolean;
 }
 
 const defaultConfig: Config = {
@@ -72,6 +76,7 @@ const defaultConfig: Config = {
     uploadDirs: [],
     editSummary: DEFAULT_EDIT_SUMMARY,
     editTags: [],
+    moderationAwareness: true,
     wikis: {},
 };
 
@@ -132,6 +137,17 @@ const splitUploadDirList = (
         .filter(entry => entry !== '');
 };
 
+/** `moderationAwareness` 缺省开启；类型错误必须报出来，避免误以为检测已生效。 */
+const resolveModerationAwareness = (raw: unknown): boolean => {
+    if (raw === undefined || raw === null) {
+        return true;
+    }
+    if (typeof raw !== 'boolean') {
+        throw new Error('Config error: "moderationAwareness" must be a boolean');
+    }
+    return raw;
+};
+
 const resolveUploadDirs = (rawFromConfig: unknown): readonly string[] => {
     const fromConfig: string[] = [];
     if (rawFromConfig !== undefined) {
@@ -188,6 +204,7 @@ const resolveConfig = (parsed: unknown): Config => {
     const uploadDirs = resolveUploadDirs(p.uploadDirs);
     const editSummary = resolveEditSummary(p.editSummary);
     const editTags = resolveEditTags(p.editTags);
+    const moderationAwareness = resolveModerationAwareness(p.moderationAwareness);
 
     const codes = readWikiCodes(p.wikis);
     const wikis: Record<string, WikiConfig> = {};
@@ -201,7 +218,15 @@ const resolveConfig = (parsed: unknown): Config => {
     // 第一个即默认站点；为空则由启动检查拒绝。
     const defaultWiki = codes[0] ?? '';
     applyOAuth2ClientIdOverride(wikis, defaultWiki);
-    return { defaultWiki, wikis, allowWikiManagement, uploadDirs, editSummary, editTags };
+    return {
+        defaultWiki,
+        wikis,
+        allowWikiManagement,
+        uploadDirs,
+        editSummary,
+        editTags,
+        moderationAwareness,
+    };
 };
 
 /**

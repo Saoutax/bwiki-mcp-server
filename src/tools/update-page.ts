@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { contentMaxBytes } from '../results/truncation.ts';
 import type { ToolContext } from '../runtime/context.ts';
 import type { Tool } from '../runtime/tool.ts';
+import { MODERATION_WRITE_NOTICE } from '../services/moderationService.ts';
 import { editableChildrenOf } from '../services/sectionSubtree.ts';
 import { buildPageUrl, formatEditComment } from '../wikis/utils.ts';
 
@@ -342,12 +343,16 @@ const submitEdit = async (
         );
     }
     const resolvedTitle = edit.title ?? args.title;
+    const pending = await ctx.moderation.afterWrite(mwn, resolvedTitle);
     return ctx.format.ok({
         pageId: edit.pageid,
         title: resolvedTitle,
         latestRevisionId: edit.newrevid,
         latestRevisionTimestamp: edit.newtimestamp,
         contentModel: edit.contentmodel,
+        ...(pending !== undefined
+            ? { moderated: true, moderationNotice: MODERATION_WRITE_NOTICE }
+            : {}),
         ...(args.bot === true ? { botMarked: await ctx.edit.botRight(mwn) } : {}),
         url: await buildPageUrl(ctx, resolvedTitle),
     });
@@ -440,7 +445,7 @@ const findReplace = async (
 const updatePage: Tool<typeof inputSchema> = {
     name: 'update-page',
     description:
-        "Writes to an existing wiki page and returns the new revision ID. Fails if the page does not exist; for new pages, use create-page. operation says what the write does and section says where: omit section to act on the whole page, or set it to confine the write to one section. For changing part of a page, use operation='find-replace', which carries only the text being rewritten, so nothing outside find can be lost and the rest of the page never has to travel to or from the caller; a find that matches nothing, or more than one place, is refused without writing, which also makes it safe to resend a call whose result never arrived. For replacing a target outright, use operation='replace', whose source must carry every byte meant to survive; it is refused when source would shorten a target too large for one read to return whole, since the rest was never seen. With section set it also takes out every subsection nested under that section, is refused when source would drop them, and needs latestId to say which revision the section number was read from. operation='append' and 'prepend' add a delta: a new section at the end of the page is an append whose source begins with the heading, and with section set a prepend inserts one immediately above that section. Pass latestId (reported as latestRevisionId by any get-page read that returns wikitext) for edit-conflict detection: the write is rejected rather than silently clobbering a concurrent change. Each call is a separate revision, and resending an append or prepend whose result never arrived adds the delta a second time.",
+        "Writes to an existing wiki page and returns the new revision ID. Fails if the page does not exist; for new pages, use create-page. operation says what the write does and section says where: omit section to act on the whole page, or set it to confine the write to one section. On wikis with the Moderation extension, an account without skip-moderation has the edit queued for review: the response then reports moderated: true and the page keeps its old content until the edit is approved. For changing part of a page, use operation='find-replace', which carries only the text being rewritten, so nothing outside find can be lost and the rest of the page never has to travel to or from the caller; a find that matches nothing, or more than one place, is refused without writing, which also makes it safe to resend a call whose result never arrived. For replacing a target outright, use operation='replace', whose source must carry every byte meant to survive; it is refused when source would shorten a target too large for one read to return whole, since the rest was never seen. With section set it also takes out every subsection nested under that section, is refused when source would drop them, and needs latestId to say which revision the section number was read from. operation='append' and 'prepend' add a delta: a new section at the end of the page is an append whose source begins with the heading, and with section set a prepend inserts one immediately above that section. Pass latestId (reported as latestRevisionId by any get-page read that returns wikitext) for edit-conflict detection: the write is rejected rather than silently clobbering a concurrent change. Each call is a separate revision, and resending an append or prepend whose result never arrived adds the delta a second time.",
     inputSchema,
     annotations: {
         title: 'Update page',

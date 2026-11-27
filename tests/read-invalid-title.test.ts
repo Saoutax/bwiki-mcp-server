@@ -34,7 +34,13 @@ describe('get-page 无效标题', () => {
         } as unknown as Mwn;
 
         const result = await getPage.handle(
-            { title: '[', content: ContentFormat.source, metadata: false, section: undefined },
+            {
+                title: '[',
+                content: ContentFormat.source,
+                metadata: false,
+                section: undefined,
+                includePending: false,
+            },
             makeCtx(mwn),
         );
 
@@ -57,6 +63,7 @@ describe('get-page 无效标题', () => {
                 content: ContentFormat.source,
                 metadata: false,
                 section: undefined,
+                includePending: false,
             },
             makeCtx(mwn),
         );

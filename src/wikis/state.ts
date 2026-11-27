@@ -20,6 +20,7 @@ interface AppState {
     readonly loginGate: LoginGate;
     readonly editSummary: EditSummarySettings;
     readonly editTags: readonly string[];
+    readonly moderationAwareness: boolean;
 }
 
 const createAppState = (config: Config): AppState => {
@@ -40,6 +41,7 @@ const createAppState = (config: Config): AppState => {
         loginGate,
         editSummary: config.editSummary,
         editTags: config.editTags,
+        moderationAwareness: config.moderationAwareness,
     };
 };
 

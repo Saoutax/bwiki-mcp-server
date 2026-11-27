@@ -4,6 +4,7 @@ import type { EditSummarySettings } from '../config/editSummary.ts';
 import type { ErrorClassifier } from '../errors/classifyError.ts';
 import type { ResponseFormatter } from '../results/response.ts';
 import type { EditService } from '../services/editService.ts';
+import type { ModerationService } from '../services/moderationService.ts';
 import type { RevisionNormalizer } from '../services/revisionNormalize.ts';
 import type { SectionService } from '../services/sectionService.ts';
 import type { ActiveWiki } from '../wikis/activeWiki.ts';
@@ -25,6 +26,7 @@ interface ToolContext {
     readonly loginGate: LoginGate;
     readonly sections: SectionService;
     readonly edit: EditService;
+    readonly moderation: ModerationService;
     readonly revision: RevisionNormalizer;
     readonly format: ResponseFormatter;
     readonly errors: ErrorClassifier;

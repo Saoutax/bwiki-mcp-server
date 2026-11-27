@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_EDIT_SUMMARY } from '../src/config/editSummary.ts';
 import { ResponseFormatterImpl } from '../src/results/response.ts';
 import type { ToolContext } from '../src/runtime/context.ts';
+import { ModerationServiceImpl } from '../src/services/moderationService.ts';
 import { updatePage } from '../src/tools/update-page.ts';
 
 const SITE_INFO = { server: 'https://wiki.biligame.com', articlepath: '/demo' };
@@ -65,6 +66,7 @@ const makeCtx = (mwn: Mwn, submitted: Record<string, unknown>[]): ToolContext =>
             botRight: async () => true,
         },
         editSummary: DEFAULT_EDIT_SUMMARY,
+        moderation: new ModerationServiceImpl(false),
         format: new ResponseFormatterImpl(),
         // 只需以上字段；其余成员在本次校验与提交路径上不会被读取。
     }) as unknown as ToolContext;

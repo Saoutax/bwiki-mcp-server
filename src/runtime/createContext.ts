@@ -1,6 +1,7 @@
 import { ErrorClassifierImpl } from '../errors/classifyError.ts';
 import { ResponseFormatterImpl } from '../results/response.ts';
 import { EditServiceImpl } from '../services/editService.ts';
+import { ModerationServiceImpl } from '../services/moderationService.ts';
 import { RevisionNormalizerImpl } from '../services/revisionNormalize.ts';
 import { SectionServiceImpl } from '../services/sectionService.ts';
 import { extensionErrorVocabulary, extensionPacks } from '../tools/extensions/index.ts';
@@ -35,6 +36,7 @@ const createToolContext = (deps: {
         loginGate: state.loginGate,
         sections: new SectionServiceImpl(),
         edit: new EditServiceImpl(state.editTags),
+        moderation: new ModerationServiceImpl(state.moderationAwareness),
         revision: new RevisionNormalizerImpl(),
         format: new ResponseFormatterImpl(),
         errors: new ErrorClassifierImpl(extensionErrorVocabulary(extensionPacks)),
