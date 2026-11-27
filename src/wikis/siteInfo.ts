@@ -3,6 +3,7 @@ import type { ToolContext } from '../runtime/context.ts';
 import { withSharedWorkScope } from '../runtime/requestContext.ts';
 import { normalizeServer } from './normalizeServer.ts';
 import type { SiteInfo, LicenseInfo, SiteInfoCache } from './siteInfoCache.ts';
+import { readMaxUploadSize } from './uploadLimit.ts';
 
 interface SiteInfoApiResponse {
     query?: {
@@ -11,6 +12,8 @@ interface SiteInfoApiResponse {
             articlepath?: string;
             lang?: string;
             sitename?: string;
+            /** 站点允许的最大上传字节数；未设上限时缺省。 */
+            maxuploadsize?: number;
             'wikibase-sparql'?: string;
         };
         rightsinfo?: { url?: string; text?: string };
@@ -64,6 +67,7 @@ const fetchSiteInfo = async (ctx: ToolContext, wikiKey: string): Promise<SiteInf
             response.query?.namespacealiases,
         );
         const namespaceCanonical = readNamespaceCanonical(response.query?.namespaces);
+        const maxuploadsize = readMaxUploadSize(general.maxuploadsize);
 
         const resolved: SiteInfo = {
             server: normalizeServer(general.server),
@@ -71,6 +75,7 @@ const fetchSiteInfo = async (ctx: ToolContext, wikiKey: string): Promise<SiteInf
                 typeof general.articlepath === 'string'
                     ? general.articlepath.replace('/$1', '')
                     : configured.articlepath,
+            ...(maxuploadsize !== undefined ? { maxuploadsize } : {}),
             ...(typeof general.sitename === 'string' && general.sitename !== ''
                 ? { sitename: general.sitename }
                 : {}),

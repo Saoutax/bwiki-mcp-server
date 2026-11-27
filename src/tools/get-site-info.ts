@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ToolContext } from '../runtime/context.ts';
 import type { Tool } from '../runtime/tool.ts';
 import { resolveSiteInfo } from '../wikis/siteInfo.ts';
+import { readMaxUploadSize } from '../wikis/uploadLimit.ts';
 
 const inputSchema = {
     includeStatistics: z
@@ -23,6 +24,8 @@ interface RawGeneral {
     readonly: boolean;
     readonlyreason?: string;
     maxarticlesize: number;
+    /** 站点允许的最大上传字节数；未设上限时缺省。 */
+    maxuploadsize?: number;
 }
 
 interface RawNamespace {
@@ -78,6 +81,8 @@ interface CompactGeneral {
     readonly: boolean;
     readonlyreason?: string;
     maxarticlesize: number;
+    /** 站点允许的最大上传字节数；未设上限时缺省。 */
+    maxuploadsize?: number;
 }
 
 interface CompactNamespace {
@@ -99,6 +104,10 @@ const buildGeneral = (g: RawGeneral): CompactGeneral => {
     };
     if (g.readonly && typeof g.readonlyreason === 'string') {
         general.readonlyreason = g.readonlyreason;
+    }
+    const maxuploadsize = readMaxUploadSize(g.maxuploadsize);
+    if (maxuploadsize !== undefined) {
+        general.maxuploadsize = maxuploadsize;
     }
     return general;
 };
@@ -137,7 +146,7 @@ const buildNamespaces = (
 const getSiteInfo: Tool<typeof inputSchema> = {
     name: 'get-site-info',
     description:
-        'Returns key facts about the targeted wiki from its MediaWiki siteinfo: general settings (sitename, MediaWiki version, content language, page-title case-sensitivity, live read-only state, and maxarticlesize in bytes), the namespace map with localized names and aliases, the list of installed extension names, and the content license. Set includeStatistics to also return page, article, edit, image, user, active-user, and admin counts.',
+        'Returns key facts about the targeted wiki from its MediaWiki siteinfo: general settings (sitename, MediaWiki version, content language, page-title case-sensitivity, live read-only state, maxarticlesize in bytes, and maxuploadsize — the largest file the wiki accepts, in bytes), the namespace map with localized names and aliases, the list of installed extension names, and the content license. Set includeStatistics to also return page, article, edit, image, user, active-user, and admin counts.',
     inputSchema,
     annotations: {
         title: 'Get site info',

@@ -24,6 +24,10 @@ class UploadWarningError extends Error {
 // MediaWiki 用 exists 告知同名文件已存在，部分版本给出 fileexists。
 const FILE_EXISTS_WARNINGS = new Set(['exists', 'fileexists']);
 
+// 站点侧对文件内容的校验失败。BWiki 上由 CheckImageUpload 执行：
+// 它按内容判定图片类型，扩展名像图片并不会让它放行。
+const IMAGE_VERIFICATION_WARNINGS = new Set(['verification-error', 'badimages']);
+
 /**
  * 校验 action=upload 的结果，非 Success 时抛出带错误码的 UploadWarningError。
  *
@@ -48,10 +52,12 @@ const assertUploadResult = (upload: ApiUploadResponse): void => {
 
     const detail = warningNames.length > 0 ? warningNames.join(', ') : 'no warnings reported';
     const resultLabel = typeof result === 'string' ? result : 'unknown';
-    throw new UploadWarningError(
-        code,
-        `Upload was not successful (result: ${resultLabel}; warnings: ${detail}).`,
-    );
+    const codeMessage = `Upload was not successful (result: ${resultLabel}; warnings: ${detail}).`;
+    // 图片校验失败时补一句说明，避免调用方把「名字像图片」当成可以通过的理由。
+    const verificationHint = warningNames.some(name => IMAGE_VERIFICATION_WARNINGS.has(name))
+        ? " The file content did not pass the wiki's image verification (CheckImageUpload on BWiki); content that is not a real image is rejected even when its name looks like an image."
+        : '';
+    throw new UploadWarningError(code, codeMessage + verificationHint);
 };
 
 interface EditService {

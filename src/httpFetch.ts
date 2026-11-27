@@ -34,6 +34,7 @@ const DEFAULT_UPLOAD_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 const FETCH_TIMEOUT_MS = 30_000;
 
 // 服务端抓取的内存上限，超限时转交 wiki 侧 copy-upload，不报错。
+// 导出以便上传工具与站点上限取较小者（见 wikis/uploadLimit.ts）。
 const resolveUploadMaxBytes = (): number => {
     const raw = process.env.MCP_UPLOAD_MAX_BYTES;
     if (raw === undefined || raw === '') {
@@ -340,5 +341,6 @@ export {
     fetchPageHtml,
     fetchGuardedBytes,
     fetchFileBytes,
+    resolveUploadMaxBytes,
     shouldRescueToWiki,
 };

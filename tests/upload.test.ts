@@ -269,8 +269,26 @@ describe('assertUploadResult', () => {
 
     it('其他警告映射为 upload-warning', () => {
         expect(
-            captureWarning({ result: 'Warning', warnings: { 'verification-error': '' } }).code,
+            captureWarning({ result: 'Warning', warnings: { 'duplicate-archive': '' } }).code,
         ).toBe('upload-warning');
+    });
+
+    it('verification-error 附带图片校验提示', () => {
+        const error = captureWarning({ result: 'Warning', warnings: { 'verification-error': '' } });
+        expect(error.code).toBe('upload-warning');
+        expect(error.message).toContain('CheckImageUpload');
+        expect(error.message).toContain('not a real image');
+    });
+
+    it('badimages 附带图片校验提示', () => {
+        const error = captureWarning({ result: 'Warning', warnings: { badimages: '' } });
+        expect(error.code).toBe('upload-warning');
+        expect(error.message).toContain('CheckImageUpload');
+    });
+
+    it('其他警告不附带图片校验提示', () => {
+        const error = captureWarning({ result: 'Warning', warnings: { 'duplicate-archive': '' } });
+        expect(error.message).not.toContain('CheckImageUpload');
     });
 
     it('没有 warnings 的非 Success 也算失败', () => {

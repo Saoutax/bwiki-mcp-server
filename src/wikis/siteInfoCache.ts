@@ -8,6 +8,11 @@ type LicenseInfo = { url: string; title: string };
 type SiteInfo = {
     server: string;
     articlepath: string;
+    /**
+     * 站点允许的最大上传字节数（`general.maxuploadsize`），用于上传前预检。
+     * 站点未设上限或未报告时缺省，此时不做站点侧的大小预检。
+     */
+    maxuploadsize?: number;
     /** 站点名（$wgSitename）；siteinfo 未报告时缺省。 */
     sitename?: string;
     /** The wiki's content language ($wgLanguageCode); absent when siteinfo omitted it. */

@@ -4,13 +4,19 @@ import type { ApiUploadParams } from 'types-mediawiki-api';
 import { z } from 'zod';
 import { errorMessage } from '../errors/isErrnoException.ts';
 import { assertFileExists, FileNotFoundError, InvalidFileTitleError } from '../fileExistence.ts';
-import { fetchFileBytes, shouldRescueToWiki } from '../httpFetch.ts';
+import {
+    fetchFileBytes,
+    FileTooLargeError,
+    resolveUploadMaxBytes,
+    shouldRescueToWiki,
+} from '../httpFetch.ts';
 import type { ToolContext } from '../runtime/context.ts';
 import { getRequestSignal } from '../runtime/requestContext.ts';
 import type { Tool } from '../runtime/tool.ts';
 import { assertUploadResult } from '../services/editService.ts';
 import { resolveSiteInfo } from '../wikis/siteInfo.ts';
 import { toNamespaceTitle } from '../wikis/titlePrefix.ts';
+import { resolveEffectiveMaxBytes, siteUploadLimitMessage } from '../wikis/uploadLimit.ts';
 import { formatEditComment, buildPageUrl } from '../wikis/utils.ts';
 
 /**
@@ -71,10 +77,29 @@ const updateFileFromUrl: Tool<typeof inputSchema> = {
 
         // 优先在服务端抓取（经 SSRF 校验、受大小限制）后以 multipart 上传；
         // 仅在无法访问该 URL 时回退到 wiki 侧抓取。
+        // 抓取上限取服务端内存上限与站点上限的较小者，站点上限更严时提前拒绝。
+        const siteMaxUploadSize = siteInfo.maxuploadsize;
+        const effectiveMaxBytes = resolveEffectiveMaxBytes(
+            resolveUploadMaxBytes(),
+            siteMaxUploadSize,
+        );
         let bytes: Buffer | undefined;
         try {
-            bytes = await fetchFileBytes(url, { signal: getRequestSignal() });
+            bytes = await fetchFileBytes(url, {
+                maxBytes: effectiveMaxBytes,
+                signal: getRequestSignal(),
+            });
         } catch (error) {
+            // 站点上限更严时，转交 wiki 侧只会得到同样的拒绝，直接判定无效输入。
+            if (
+                error instanceof FileTooLargeError &&
+                siteMaxUploadSize !== undefined &&
+                error.size > siteMaxUploadSize
+            ) {
+                return ctx.format.invalidInput(
+                    `Could not update ${url}: ${siteUploadLimitMessage(error.size, siteMaxUploadSize)}`,
+                );
+            }
             if (!shouldRescueToWiki(error, getRequestSignal())) {
                 throw error;
             }

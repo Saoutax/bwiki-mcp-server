@@ -3,13 +3,19 @@ import type { ApiUploadResponse } from 'mwn';
 import type { ApiUploadParams } from 'types-mediawiki-api';
 import { z } from 'zod';
 import { errorMessage } from '../errors/isErrnoException.ts';
-import { fetchFileBytes, shouldRescueToWiki } from '../httpFetch.ts';
+import {
+    fetchFileBytes,
+    FileTooLargeError,
+    resolveUploadMaxBytes,
+    shouldRescueToWiki,
+} from '../httpFetch.ts';
 import type { ToolContext } from '../runtime/context.ts';
 import { getRequestSignal } from '../runtime/requestContext.ts';
 import type { Tool } from '../runtime/tool.ts';
 import { assertUploadResult } from '../services/editService.ts';
 import { resolveSiteInfo } from '../wikis/siteInfo.ts';
 import { toNamespaceTitle } from '../wikis/titlePrefix.ts';
+import { resolveEffectiveMaxBytes, siteUploadLimitMessage } from '../wikis/uploadLimit.ts';
 import { formatEditComment, buildPageUrl } from '../wikis/utils.ts';
 
 const inputSchema = {
@@ -49,14 +55,34 @@ const uploadFileFromUrl: Tool<typeof inputSchema> = {
 
         // 优先在服务端抓取后以 multipart 上传，wiki 无需开启 copy-upload。
         // 不发送 ignorewarnings：同名冲突必须报错，而非静默覆盖。
+        // 抓取上限取服务端内存上限与站点上限的较小者：
+        // 站点上限更严时不必读取整份文件就能拒绝。
+        const siteMaxUploadSize = siteInfo.maxuploadsize;
+        const effectiveMaxBytes = resolveEffectiveMaxBytes(
+            resolveUploadMaxBytes(),
+            siteMaxUploadSize,
+        );
         let bytes: Buffer | undefined;
         try {
-            bytes = await fetchFileBytes(url, { signal: getRequestSignal() });
+            bytes = await fetchFileBytes(url, {
+                maxBytes: effectiveMaxBytes,
+                signal: getRequestSignal(),
+            });
         } catch (error) {
+            // 站点上限更严时，转交 wiki 侧只会得到同样的拒绝，直接判定无效输入。
+            if (
+                error instanceof FileTooLargeError &&
+                siteMaxUploadSize !== undefined &&
+                error.size > siteMaxUploadSize
+            ) {
+                return ctx.format.invalidInput(
+                    `Could not upload ${url}: ${siteUploadLimitMessage(error.size, siteMaxUploadSize)}`,
+                );
+            }
             if (!shouldRescueToWiki(error, getRequestSignal())) {
                 throw error;
             }
-            // 不可达或超限时回退到 wiki 侧 copy-upload。
+            // 不可达，或仅超出服务端内存上限（未超站点上限）时回退到 wiki 侧 copy-upload。
         }
 
         let data: ApiUploadResponse;

@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import type { ApiUploadResponse } from 'mwn';
 import type { ApiUploadParams } from 'types-mediawiki-api';
@@ -8,6 +9,7 @@ import type { Tool } from '../runtime/tool.ts';
 import { assertAllowedPath, UploadValidationError } from '../uploadGuard.ts';
 import { resolveSiteInfo } from '../wikis/siteInfo.ts';
 import { toNamespaceTitle } from '../wikis/titlePrefix.ts';
+import { exceedsSiteUploadLimit, siteUploadLimitMessage } from '../wikis/uploadLimit.ts';
 import { formatEditComment, buildPageUrl } from '../wikis/utils.ts';
 
 const inputSchema = {
@@ -46,6 +48,18 @@ const updateFile: Tool<typeof inputSchema> = {
                 return ctx.format.invalidInput(`Failed to update file: ${error.message}`);
             }
             throw error;
+        }
+
+        // 站点上限小于服务端内存上限时，本地文件也可能被拒：
+        // 先 stat 拿到大小，超限就不必读取整份文件、也不发出上传请求。
+        const siteMaxUploadSize = siteInfo.maxuploadsize;
+        if (siteMaxUploadSize !== undefined) {
+            const { size } = await stat(resolvedPath);
+            if (exceedsSiteUploadLimit(size, siteMaxUploadSize)) {
+                return ctx.format.invalidInput(
+                    `Failed to update file: ${siteUploadLimitMessage(size, siteMaxUploadSize)}`,
+                );
+            }
         }
 
         const mwn = await ctx.mwn();
