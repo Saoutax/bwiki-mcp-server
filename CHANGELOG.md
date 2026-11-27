@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.0](https://github.com/Saoutax/bwiki-mcp-server/compare/v1.2.1...v1.3.0) (2026-11-27)
+
+
+### Features
+
+* **config:** 默认编辑摘要改为 BWiki MCP Server ([8117b53](https://github.com/Saoutax/bwiki-mcp-server/commit/8117b53a23edd3c559d392b323381205f1184b47))
+* **moderation:** 感知审核队列 ([3e0ac17](https://github.com/Saoutax/bwiki-mcp-server/commit/3e0ac17349060c6c57addc0d7c5ed520f8e7d57a)), closes [#9](https://github.com/Saoutax/bwiki-mcp-server/issues/9)
+* **search:** 支持 CirrusSearch 检索参数 ([60881e3](https://github.com/Saoutax/bwiki-mcp-server/commit/60881e351621bcb8d38be22477adf80568114369)), closes [#12](https://github.com/Saoutax/bwiki-mcp-server/issues/12)
+* **tools:** 新增随机页面工具 ([4a52032](https://github.com/Saoutax/bwiki-mcp-server/commit/4a52032d3b264249e58b631792f521468ad8c27f)), closes [#10](https://github.com/Saoutax/bwiki-mcp-server/issues/10)
+* **upload:** 按站点上限预检上传大小 ([7bc8f53](https://github.com/Saoutax/bwiki-mcp-server/commit/7bc8f53c967dddc8a87fead80d4cb75c69fa8235)), closes [#11](https://github.com/Saoutax/bwiki-mcp-server/issues/11)
+
+
+### Documentation
+
+* 同步新工具与审核说明 ([cbdab40](https://github.com/Saoutax/bwiki-mcp-server/commit/cbdab40161e5c23d531bd224a96944130e7b95c6))
+
 ## [1.2.1](https://github.com/Saoutax/bwiki-mcp-server/compare/v1.2.0...v1.2.1) (2026-11-18)
 
 
