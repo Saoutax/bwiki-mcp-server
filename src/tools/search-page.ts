@@ -7,8 +7,13 @@ import type { Tool } from '../runtime/tool.ts';
 import { resolveSiteInfo } from '../wikis/siteInfo.ts';
 import { buildPageUrl } from '../wikis/utils.ts';
 
+const SearchWhat = z.enum(['text', 'title', 'nearmatch']);
+
 const inputSchema = {
     query: z.string().describe('Search terms'),
+    what: SearchWhat.optional().describe(
+        'Which field to match the terms against: page text, page title, or a near-match title suggestion. Defaults to text.',
+    ),
     limit: z
         .number()
         .int()
@@ -26,7 +31,7 @@ const inputSchema = {
 const searchPage: Tool<typeof inputSchema> = {
     name: 'search-page',
     description:
-        "Searches wiki page titles and page content (full-text) for the provided terms. Returns matching pages with a snippet, size, timestamp, and the namespace the match came from. Covers the namespaces the wiki counts as content unless namespaces names the namespace IDs to search; get-site-info lists a wiki's namespaces and flags which of them hold content. Accepts up to 100 matches per call (default 10); additional matches beyond the cap are flagged in the response — narrow the query to surface more. For title-prefix lookup (e.g. autocomplete), use search-page-by-prefix.",
+        "Searches wiki page titles and page content (full-text) for the provided terms. Returns matching pages with a snippet, size, timestamp, and the namespace the match came from. what picks the field to match: text (page content, default), title (titles only), or nearmatch (close title matches). Covers the namespaces the wiki counts as content unless namespaces names the namespace IDs to search; get-site-info lists a wiki's namespaces and flags which of them hold content. On wikis with CirrusSearch enabled the query also accepts CirrusSearch's advanced syntax — e.g. insource:模板:信息框 searches wikitext, incategory:武器 limits results to a category, intitle:角色 requires the term in the title, and prefix:模板:信息框/ limits results to a title prefix. The response reports totalHits and a suggestion when the wiki provides them. Accepts up to 100 matches per call (default 10); additional matches beyond the cap are flagged in the response — narrow the query to surface more. For title-prefix lookup (e.g. autocomplete), use search-page-by-prefix.",
     inputSchema,
     annotations: {
         title: 'Search page',
@@ -38,7 +43,7 @@ const searchPage: Tool<typeof inputSchema> = {
     failureVerb: 'retrieve search data',
     target: a => a.query,
 
-    async handle({ query, limit, namespaces }, ctx: ToolContext): Promise<CallToolResult> {
+    async handle({ query, what, limit, namespaces }, ctx: ToolContext): Promise<CallToolResult> {
         const mwn = await ctx.mwn();
         const scope = await resolveScope(ctx, namespaces);
 
@@ -46,8 +51,10 @@ const searchPage: Tool<typeof inputSchema> = {
             action: 'query',
             list: 'search',
             srsearch: query,
-            srwhat: 'text',
+            srwhat: what ?? 'text',
             srprop: 'snippet|size|timestamp|wordcount',
+            // CirrusSearch 的 searchinfo；标准 MediaWiki 不返回该键。
+            srinfo: 'totalhits|suggestion|rewrittenquery',
             formatversion: '2',
         };
 
@@ -61,6 +68,7 @@ const searchPage: Tool<typeof inputSchema> = {
 
         const response = await mwn.request(params);
         const searchResults: ApiSearchResult[] = response.query?.search ?? [];
+        const searchInfo = readSearchInfo(response);
 
         const truncation: TruncationInfo | null = response.continue
             ? {
@@ -68,7 +76,10 @@ const searchPage: Tool<typeof inputSchema> = {
                   returnedCount: searchResults.length,
                   limit: limit ?? 10,
                   itemNoun: 'matches',
-                  narrowHint: 'narrow the query or raise limit (max 100)',
+                  narrowHint:
+                      searchInfo.totalHits !== undefined
+                          ? `this query matched ${searchInfo.totalHits} pages; narrow the query or raise limit (max 100)`
+                          : 'narrow the query or raise limit (max 100)',
               }
             : null;
 
@@ -89,6 +100,8 @@ const searchPage: Tool<typeof inputSchema> = {
 
         return ctx.format.ok({
             results,
+            ...(searchInfo.totalHits !== undefined ? { totalHits: searchInfo.totalHits } : {}),
+            ...(searchInfo.suggestion !== undefined ? { suggestion: searchInfo.suggestion } : {}),
             ...(scopeNotice !== null ? { scopeNotice } : {}),
             ...(truncation !== null ? { truncation } : {}),
         });
@@ -168,6 +181,28 @@ const describeScopeLoss = (
     }
 
     return parts.length > 0 ? parts.join(' ') : null;
+};
+
+// CirrusSearch 只在其扩展启用时填充 searchinfo；标准 MediaWiki 不返回该键。
+interface SearchInfo {
+    /** Total number of matches, when the wiki reports it. */
+    readonly totalHits?: number;
+    /** Corrected or alternate query the wiki suggests. */
+    readonly suggestion?: string;
+}
+
+const readSearchInfo = (response: ApiResponse): SearchInfo => {
+    const info: unknown = response.query?.searchinfo;
+    if (!isRecord(info)) {
+        return {};
+    }
+
+    return {
+        ...(typeof info.totalhits === 'number' ? { totalHits: info.totalhits } : {}),
+        ...(typeof info.suggestion === 'string' && info.suggestion !== ''
+            ? { suggestion: info.suggestion }
+            : {}),
+    };
 };
 
 // API 把不可用的参数报在接收它的模块名下，响应本身仍为成功。
