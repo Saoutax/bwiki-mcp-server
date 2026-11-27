@@ -19,25 +19,26 @@
 
 ### 页面读操作
 
-| 名称                    | 说明                                                                                                                   |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `compare-pages`         | 按版本号、标题或指定 wikitext 对比同一页面的两个版本。                                                                 |
-| `get-category-members`  | 列出分类成员（每次最多 500 条，用 `continueFrom` 翻页）。                                                              |
-| `get-file`              | 获取一个文件页面。                                                                                                     |
-| `get-file-data`         | 以内联 base64 返回图片字节，供模型直接查看。返回缩放后的版本（用 `width` 指定）；不可渲染的类型会报错。                |
-| `get-links-here`        | 列出引用了某页面的页面，包含经由重定向到达的（每次最多 500 条）。                                                      |
-| `get-page`              | 获取一个 wiki 页面。                                                                                                   |
-| `get-page-history`      | 列出页面的近期修订。                                                                                                   |
-| `get-pages`             | 一次获取多个页面（最多 50 个）。                                                                                       |
-| `get-recent-changes`    | 列出全站近期变更，可按时间、命名空间、用户、标签、类型过滤。                                                           |
-| `get-revision`          | 获取页面的指定修订版本。                                                                                               |
-| `get-site-info`         | 获取站点的关键设置：MediaWiki 版本、内容语言、命名空间、已安装扩展、许可协议。                                         |
-| `list-pages`            | 按命名空间列出页面，按标题排序（每次最多 500 条，用 `continueFrom` 翻页）。                                            |
-| `list-wikis`            | 列出农场内的 WIKI——代号、站点名、地址、是否只读或默认，以及是否已在本地配置。支持 `limit`、`query`、`configuredOnly`。 |
-| `parse-wikitext`        | 把 wikitext 渲染成 HTML，不保存。                                                                                      |
-| `search-page`           | 对页面标题与正文做全文搜索。                                                                                           |
-| `search-page-by-prefix` | 按标题前缀搜索页面；支持 `模板:`、`分类:` 等命名空间前缀，省略时默认主命名空间。                                       |
-| `whoami`                | 报告当前会话认证的身份——用户名、是否匿名、所属用户组。                                                                 |
+| 名称                    | 说明                                                                                                                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `compare-pages`         | 按版本号、标题或指定 wikitext 对比同一页面的两个版本。                                                                                                                        |
+| `get-category-members`  | 列出分类成员（每次最多 500 条，用 `continueFrom` 翻页）。                                                                                                                     |
+| `get-file`              | 获取一个文件页面。                                                                                                                                                            |
+| `get-file-data`         | 以内联 base64 返回图片字节，供模型直接查看。返回缩放后的版本（用 `width` 指定）；不可渲染的类型会报错。                                                                       |
+| `get-links-here`        | 列出引用了某页面的页面，包含经由重定向到达的（每次最多 500 条）。                                                                                                             |
+| `get-page`              | 获取一个 wiki 页面；`includePending` 为真时同时返回自己在该页的待审版本。                                                                                                     |
+| `get-page-history`      | 列出页面的近期修订。                                                                                                                                                          |
+| `get-pages`             | 一次获取多个页面（最多 50 个）。                                                                                                                                              |
+| `get-random-pages`      | 随机抽取某个命名空间的页面（默认主命名空间、非重定向、10 条；每次调用结果不同，不支持翻页）。                                                                                 |
+| `get-recent-changes`    | 列出全站近期变更，可按时间、命名空间、用户、标签、类型过滤。                                                                                                                  |
+| `get-revision`          | 获取页面的指定修订版本。                                                                                                                                                      |
+| `get-site-info`         | 获取站点的关键设置：MediaWiki 版本、内容语言、命名空间、已安装扩展、许可协议、最大上传字节数。                                                                                |
+| `list-pages`            | 按命名空间列出页面，按标题排序（每次最多 500 条，用 `continueFrom` 翻页）。                                                                                                   |
+| `list-wikis`            | 列出农场内的 WIKI——代号、站点名、地址、是否只读或默认，以及是否已在本地配置。支持 `limit`、`query`、`configuredOnly`。                                                        |
+| `parse-wikitext`        | 把 wikitext 渲染成 HTML，不保存。                                                                                                                                             |
+| `search-page`           | 全文搜索页面。`what` 选择匹配字段（`text`、`title`、`nearmatch`）；站点支持时响应含 `totalHits` 与 `suggestion`；启用 CirrusSearch 时可写 `insource:`、`incategory:` 等语法。 |
+| `search-page-by-prefix` | 按标题前缀搜索页面；支持 `模板:`、`分类:` 等命名空间前缀，省略时默认主命名空间。                                                                                              |
+| `whoami`                | 报告当前会话认证的身份——用户名、是否匿名、所属用户组，以及编辑是否会被审核。                                                                                                  |
 
 ### 页面写操作
 
@@ -55,6 +56,8 @@
 | `update-page`          | 覆盖页面、在末尾追加或开头插入内容，或只改写其中一段。 |
 | `upload-file`          | 从本地文件上传新文件。                                 |
 | `upload-file-from-url` | 从 URL 上传新文件。                                    |
+
+站点启用 Moderation 且账号没有 `skip-moderation` 权限时，`create-page` 与 `update-page` 的写入会进入待审队列，响应含 `moderated: true` 与 `moderationNotice`；审核通过前页面内容不变。详见[审核队列](#审核队列)。
 
 ### 会话管理
 
@@ -175,14 +178,15 @@ OpenCode 使用自己的配置结构而非 `mcpServers`；把下面这段加入�
 }
 ```
 
-`config.example.json` 就是这份最小示例，只含必填项。`uploadDirs`、`editSummary`、`editTags` 均为可选项，说明见下表与后续小节。
+`config.example.json` 就是这份最小示例，只含必填项。`uploadDirs`、`editSummary`、`editTags`、`moderationAwareness` 均为可选项，说明见下表与后续小节。
 
-| 字段          | 必填 | 说明                                                                                                                     |
-| ------------- | ---- | ------------------------------------------------------------------------------------------------------------------------ |
-| `wikis`       | 是   | 要使用的站点代号数组，第一个即默认站点（工具调用省略 `wiki` 参数时用它）。至少填一个，否则服务器拒绝启动。               |
-| `uploadDirs`  | 否   | 上传工具允许读取的绝对路径目录。不填或空数组即禁用上传。见[上传目录](#上传目录)。                                        |
-| `editSummary` | 否   | 编辑摘要生成方式：是否附加来源后缀、自定义模板。不填保持内置文案。见[编辑摘要与变更标签](#编辑摘要与变更标签)。          |
-| `editTags`    | 否   | 写入时附加的 MediaWiki 变更标签，全局作用于所有已配置站点。不填即不打标签。见[编辑摘要与变更标签](#编辑摘要与变更标签)。 |
+| 字段                  | 必填 | 说明                                                                                                                     |
+| --------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------ |
+| `wikis`               | 是   | 要使用的站点代号数组，第一个即默认站点（工具调用省略 `wiki` 参数时用它）。至少填一个，否则服务器拒绝启动。               |
+| `uploadDirs`          | 否   | 上传工具允许读取的绝对路径目录。不填或空数组即禁用上传。见[上传目录](#上传目录)。                                        |
+| `editSummary`         | 否   | 编辑摘要生成方式：是否附加来源后缀、自定义模板。不填保持内置文案。见[编辑摘要与变更标签](#编辑摘要与变更标签)。          |
+| `editTags`            | 否   | 写入时附加的 MediaWiki 变更标签，全局作用于所有已配置站点。不填即不打标签。见[编辑摘要与变更标签](#编辑摘要与变更标签)。 |
+| `moderationAwareness` | 否   | 写入后是否查询审核队列并标注待审编辑。默认 `true`。见[审核队列](#审核队列)。                                             |
 
 站点代号怎么查：调用 `list-wikis` 工具，它会列出整个农场的代号。例如 `["station-a", "station-b"]` 表示同时配置两个站点。
 
@@ -233,6 +237,8 @@ uploads are disabled on this server (no upload directories configured).
 
 `upload-file-from-url` 与 `update-file-from-url` 读取的是远程 URL，不受此限制。
 
+四个上传工具都会按站点 siteinfo 的 `maxuploadsize` 预检：本地文件在读取前按大小拒绝，URL 上传在读取响应体前按 `Content-Length` 判断，缺少该头时按累计字节判断。站点上限与 `MCP_UPLOAD_MAX_BYTES` 取较小者；只有服务端上限更严时，才转交 wiki 侧复制上传。上传内容未通过站点的图片校验（BWiki 由 CheckImageUpload 执行）时，错误提示会说明非真实图片无法上传。
+
 ### 编辑摘要与变更标签
 
 写工具默认给每次写入附加来源说明：有 `comment` 时是 `<你的 comment> (via <工具名> on BWiki MCP Server)`，没有时是 `Automated edit (via <工具名> on BWiki MCP Server)`。这两段文案和变更标签都可以在配置里调整：
@@ -268,6 +274,27 @@ uploads are disabled on this server (no upload directories configured).
 | 标签前提         | 标签必须在每个已配置站点的 `Special:Tags` 中已定义，且账号具备 `changetags` 权限，否则该站写入会被 wiki 拒绝。不打算给所有站点打同一组标签时请留空。 |
 | 长度             | 超长摘要由 wiki 自身拒绝，本服务不截断；来源后缀会占用摘要长度配额。                                                                                 |
 
+### 审核队列
+
+BWiki 安装了 Moderation。账号没有 `skip-moderation` 权限时，编辑不会立刻出现在页面上，而是进入待审队列。
+
+默认开启审核感知：
+
+- `whoami` 报告 `moderated`：账号的编辑是否会被审核；
+- `create-page` 与 `update-page` 写入后查询待审状态，命中时响应含 `moderated: true` 与 `moderationNotice`，提醒不要因为读到旧内容而重试；
+- `get-page` 的 `includePending: true` 返回自己在该页的待审文本，新建页面尚未通过审核时也能读到。
+
+每次非免审写入会多一次 `moderationpreload` 请求，在串行限速下约多一秒。账号具备 `skip-moderation` 时不会查询。关闭检测：
+
+```json
+{
+    "wikis": ["你的站点代号"],
+    "moderationAwareness": false
+}
+```
+
+关闭后写入与读取的行为与旧版本一致；`get-page` 的 `includePending` 仍可用。
+
 ## 认证
 
 登录方式只有一种：官方 bilibili 登录页。
@@ -297,17 +324,17 @@ uploads are disabled on this server (no upload directories configured).
 
 ## 环境变量
 
-| 名称                      | 说明                                                                                                           | 默认值         |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------- |
-| `CONFIG`                  | 配置文件路径                                                                                                   | `config.json`  |
-| `MCP_LOG_LEVEL`           | 日志最低级别。可选 `debug`、`info`、`notice`、`warning`、`error`、`critical`、`alert`、`emergency`、`silent`。 | `debug`        |
-| `MCP_CONTENT_MAX_BYTES`   | 工具返回内容正文的字节上限，按每个响应计一次。可按所用客户端的响应预算调整。                                   | `75000`        |
-| `MCP_FILE_DATA_MAX_BYTES` | `get-file-data` 响应中 base64 数据的硬上限。超限的调用直接报错，不截断。                                       | `1000000`      |
-| `MCP_UPLOAD_MAX_BYTES`    | `*-from-url` 上传工具在服务端抓取时的内存上限。超出该大小的文件会转交 wiki 自身的复制上传，不在本服务器缓存。  | `104857600`    |
-| `MCP_UPLOAD_DIRS`         | 上传工具允许读取的绝对路径目录，以 `path.delimiter` 分隔（Windows 为 `;`）。与 `uploadDirs` 合并生效。         | 未设置         |
-| `MCP_USER_AGENT`          | 替换所有外部请求的 `User-Agent` 头。不设置时使用内置的 Chrome 桌面版 UA。                                      | 内置 Chrome UA |
-| `MCP_TRUSTED_HOSTS`       | 有外发 SSRF 防护：解析到私有或回环地址的目标一律拒绝，此变量列出的主机可豁免。                                 | 未设置         |
-| `BWIKI_MCP_BROWSER_PATH`  | 指定登录用的浏览器可执行文件路径，优先于自动探测。                                                             | 自动探测       |
+| 名称                      | 说明                                                                                                                                                                     | 默认值         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
+| `CONFIG`                  | 配置文件路径                                                                                                                                                             | `config.json`  |
+| `MCP_LOG_LEVEL`           | 日志最低级别。可选 `debug`、`info`、`notice`、`warning`、`error`、`critical`、`alert`、`emergency`、`silent`。                                                           | `debug`        |
+| `MCP_CONTENT_MAX_BYTES`   | 工具返回内容正文的字节上限，按每个响应计一次。可按所用客户端的响应预算调整。                                                                                             | `75000`        |
+| `MCP_FILE_DATA_MAX_BYTES` | `get-file-data` 响应中 base64 数据的硬上限。超限的调用直接报错，不截断。                                                                                                 | `1000000`      |
+| `MCP_UPLOAD_MAX_BYTES`    | `*-from-url` 上传工具在服务端抓取时的内存上限。实际抓取上限还会与站点 siteinfo 的 `maxuploadsize` 取较小者；超站点上限时直接报错，只有仅超本上限时才转交 wiki 复制上传。 | `104857600`    |
+| `MCP_UPLOAD_DIRS`         | 上传工具允许读取的绝对路径目录，以 `path.delimiter` 分隔（Windows 为 `;`）。与 `uploadDirs` 合并生效。                                                                   | 未设置         |
+| `MCP_USER_AGENT`          | 替换所有外部请求的 `User-Agent` 头。不设置时使用内置的 Chrome 桌面版 UA。                                                                                                | 内置 Chrome UA |
+| `MCP_TRUSTED_HOSTS`       | 有外发 SSRF 防护：解析到私有或回环地址的目标一律拒绝，此变量列出的主机可豁免。                                                                                           | 未设置         |
+| `BWIKI_MCP_BROWSER_PATH`  | 指定登录用的浏览器可执行文件路径，优先于自动探测。                                                                                                                       | 自动探测       |
 
 ## 安全
 
