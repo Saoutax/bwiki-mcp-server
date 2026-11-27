@@ -12,6 +12,7 @@ import { getLinksHere } from './get-links-here.ts';
 import { getPageHistory } from './get-page-history.ts';
 import { getPage } from './get-page.ts';
 import { getPages } from './get-pages.ts';
+import { getRandomPages } from './get-random-pages.ts';
 import { getRecentChanges } from './get-recent-changes.ts';
 import { getRevision } from './get-revision.ts';
 import { getSiteInfo } from './get-site-info.ts';
@@ -52,6 +53,7 @@ const standardTools: Tool<any>[] = [
     getSiteInfo,
     getCategoryMembers,
     getLinksHere,
+    getRandomPages,
     listPages,
     listWikis,
     whoami,
